@@ -167,7 +167,7 @@ describe('loggers', () => {
       getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
-    } as Config;
+    } as any;
 
     const mockMetrics = {
       recordApiResponseMetrics: vi.fn(),
@@ -273,7 +273,7 @@ describe('loggers', () => {
       getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
-    } as Config;
+    } as any;
 
     it('should log an API request with request_text', () => {
       const event = new ApiRequestEvent('test-model', 'This is a test request');
@@ -314,7 +314,7 @@ describe('loggers', () => {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
       getGeminiClient: () => mockGeminiClient,
-    } as Config;
+    } as any;
     const cfg2 = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
@@ -350,7 +350,7 @@ describe('loggers', () => {
       getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
-    } as Config;
+    } as any;
 
     const mockMetrics = {
       recordToolCallMetrics: vi.fn(),

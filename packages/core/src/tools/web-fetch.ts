@@ -128,6 +128,9 @@ I was unable to access the URL directly. Instead, I have fetched the raw content
 ---
 ${textContent}
 ---`;
+      if (!geminiClient.generateContent) {
+        throw new Error('AI client does not support content generation');
+      }
       const result = await geminiClient.generateContent(
         [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
         {},
@@ -239,6 +242,9 @@ ${textContent}
     const geminiClient = this.config.getGeminiClient();
 
     try {
+      if (!geminiClient.generateContent) {
+        throw new Error('AI client does not support content generation');
+      }
       const response = await geminiClient.generateContent(
         [{ role: 'user', parts: [{ text: userPrompt }] }],
         { tools: [{ urlContext: {} }] },
@@ -273,9 +279,9 @@ ${textContent}
         urlContextMeta.urlMetadata.length > 0
       ) {
         const allStatuses = urlContextMeta.urlMetadata.map(
-          (m) => m.urlRetrievalStatus,
+          (m: any) => m.urlRetrievalStatus,
         );
-        if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
+        if (allStatuses.every((s: any) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
           processingError = true;
         }
       } else if (!responseText.trim() && !sources?.length) {

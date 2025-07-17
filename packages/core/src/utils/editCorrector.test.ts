@@ -37,6 +37,7 @@ import {
   resetEditCorrectorCaches_TEST_ONLY,
 } from './editCorrector.js';
 import { GeminiClient } from '../core/client.js';
+import { AIClient } from '../core/clientFactory.js';
 import type { Config } from '../config/config.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 
@@ -239,7 +240,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(1);
@@ -257,7 +258,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(0);
@@ -278,7 +279,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(1);
@@ -296,7 +297,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(0);
@@ -318,7 +319,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(1);
@@ -336,7 +337,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(0);
@@ -354,7 +355,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(0);
@@ -377,7 +378,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(1);
@@ -399,7 +400,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(2);
@@ -419,7 +420,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(1);
@@ -441,7 +442,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(1);
@@ -462,7 +463,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(1);
@@ -480,7 +481,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(0);
@@ -503,7 +504,7 @@ describe('editCorrector', () => {
         const result = await ensureCorrectEdit(
           currentContent,
           originalParams,
-          mockGeminiClientInstance,
+          mockGeminiClientInstance as any as AIClient,
           abortSignal,
         );
         expect(mockGenerateJson).toHaveBeenCalledTimes(2);
@@ -598,7 +599,7 @@ describe('editCorrector', () => {
       const content = 'This is normal content without escaping issues';
       const result = await ensureCorrectFileContent(
         content,
-        mockGeminiClientInstance,
+        mockGeminiClientInstance as any as AIClient,
         abortSignal,
       );
       expect(result).toBe(content);
@@ -614,7 +615,7 @@ describe('editCorrector', () => {
 
       const result = await ensureCorrectFileContent(
         content,
-        mockGeminiClientInstance,
+        mockGeminiClientInstance as any as AIClient,
         abortSignal,
       );
 
@@ -634,7 +635,7 @@ describe('editCorrector', () => {
 
       const result = await ensureCorrectFileContent(
         content,
-        mockGeminiClientInstance,
+        mockGeminiClientInstance as any as AIClient,
         abortSignal,
       );
 
@@ -649,7 +650,7 @@ describe('editCorrector', () => {
 
       const result = await ensureCorrectFileContent(
         content,
-        mockGeminiClientInstance,
+        mockGeminiClientInstance as any as AIClient,
         abortSignal,
       );
 
@@ -669,7 +670,7 @@ describe('editCorrector', () => {
 
       const result = await ensureCorrectFileContent(
         content,
-        mockGeminiClientInstance,
+        mockGeminiClientInstance as any as AIClient,
         abortSignal,
       );
 

@@ -26,6 +26,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { GeminiClient } from '../core/client.js';
+import { AIClient } from '../core/clientFactory.js';
 import {
   ensureCorrectEdit,
   ensureCorrectFileContent,
@@ -116,7 +117,7 @@ describe('WriteFileTool', () => {
       async (
         _currentContent: string,
         params: EditToolParams,
-        _client: GeminiClient,
+        _client: AIClient,
         signal?: AbortSignal, // Make AbortSignal optional to match usage
       ): Promise<CorrectedEditResult> => {
         if (signal?.aborted) {
@@ -131,7 +132,7 @@ describe('WriteFileTool', () => {
     mockEnsureCorrectFileContent.mockImplementation(
       async (
         content: string,
-        _client: GeminiClient,
+        _client: AIClient,
         signal?: AbortSignal,
       ): Promise<string> => {
         // Make AbortSignal optional

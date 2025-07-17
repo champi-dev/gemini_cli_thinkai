@@ -24,6 +24,8 @@ import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import { MemoryTool, setGeminiMdFilename } from '../tools/memoryTool.js';
 import { WebSearchTool } from '../tools/web-search.js';
 import { GeminiClient } from '../core/client.js';
+import { ThinkAIClient } from '../core/thinkAIClient.js';
+import { createAutoDetectedClient, AIClient } from '../core/clientFactory.js';
 import { GEMINI_CONFIG_DIR as GEMINI_DIR } from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
@@ -151,7 +153,7 @@ export class Config {
   private readonly accessibility: AccessibilitySettings;
   private readonly telemetrySettings: TelemetrySettings;
   private readonly usageStatisticsEnabled: boolean;
-  private geminiClient!: GeminiClient;
+  private aiClient!: AIClient;
   private readonly fileFiltering: {
     respectGitIgnore: boolean;
     enableRecursiveFileSearch: boolean;
@@ -246,10 +248,10 @@ export class Config {
       this,
     );
 
-    const gc = new GeminiClient(this);
-    this.geminiClient = gc;
+    // Use factory to create either Gemini or ThinkAI client
+    const client = await createAutoDetectedClient(this, contentConfig);
+    this.aiClient = client;
     this.toolRegistry = await createToolRegistry(this);
-    await gc.initialize(contentConfig);
     this.contentGeneratorConfig = contentConfig;
 
     // Reset the session flag since we're explicitly changing auth and using default model
@@ -395,8 +397,8 @@ export class Config {
     return this.telemetrySettings.target ?? DEFAULT_TELEMETRY_TARGET;
   }
 
-  getGeminiClient(): GeminiClient {
-    return this.geminiClient;
+  getGeminiClient(): AIClient {
+    return this.aiClient;
   }
 
   getGeminiDir(): string {

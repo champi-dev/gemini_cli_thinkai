@@ -10,7 +10,7 @@ import {
   SchemaUnion,
   Type,
 } from '@google/genai';
-import { GeminiClient } from '../core/client.js';
+import { AIClient } from '../core/clientFactory.js';
 import { EditToolParams } from '../tools/edit.js';
 import { LruCache } from './LruCache.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
@@ -56,14 +56,14 @@ export interface CorrectedEditResult {
  *
  * @param currentContent The current content of the file.
  * @param originalParams The original EditToolParams
- * @param client The GeminiClient for LLM calls.
+ * @param client The AIClient for LLM calls.
  * @returns A promise resolving to an object containing the (potentially corrected)
  *          EditToolParams (as CorrectedEditParams) and the final occurrences count.
  */
 export async function ensureCorrectEdit(
   currentContent: string,
   originalParams: EditToolParams, // This is the EditToolParams from edit.ts, without \'corrected\'
-  client: GeminiClient,
+  client: AIClient,
   abortSignal: AbortSignal,
 ): Promise<CorrectedEditResult> {
   const cacheKey = `${currentContent}---${originalParams.old_string}---${originalParams.new_string}`;
@@ -211,7 +211,7 @@ export async function ensureCorrectEdit(
 
 export async function ensureCorrectFileContent(
   content: string,
-  client: GeminiClient,
+  client: AIClient,
   abortSignal: AbortSignal,
 ): Promise<string> {
   const cachedResult = fileContentCorrectionCache.get(content);
@@ -249,7 +249,7 @@ const OLD_STRING_CORRECTION_SCHEMA: SchemaUnion = {
 };
 
 export async function correctOldStringMismatch(
-  geminiClient: GeminiClient,
+  geminiClient: AIClient,
   fileContent: string,
   problematicSnippet: string,
   abortSignal: AbortSignal,
@@ -278,6 +278,9 @@ Return ONLY the corrected target snippet in the specified JSON format with the k
   const contents: Content[] = [{ role: 'user', parts: [{ text: prompt }] }];
 
   try {
+    if (!geminiClient.generateJson) {
+      throw new Error('AI client does not support JSON generation');
+    }
     const result = await geminiClient.generateJson(
       contents,
       OLD_STRING_CORRECTION_SCHEMA,
@@ -326,7 +329,7 @@ const NEW_STRING_CORRECTION_SCHEMA: SchemaUnion = {
  * Adjusts the new_string to align with a corrected old_string, maintaining the original intent.
  */
 export async function correctNewString(
-  geminiClient: GeminiClient,
+  geminiClient: AIClient,
   originalOldString: string,
   correctedOldString: string,
   originalNewString: string,
@@ -406,7 +409,7 @@ const CORRECT_NEW_STRING_ESCAPING_SCHEMA: SchemaUnion = {
 };
 
 export async function correctNewStringEscaping(
-  geminiClient: GeminiClient,
+  geminiClient: AIClient,
   oldString: string,
   potentiallyProblematicNewString: string,
   abortSignal: AbortSignal,
@@ -479,7 +482,7 @@ const CORRECT_STRING_ESCAPING_SCHEMA: SchemaUnion = {
 
 export async function correctStringEscaping(
   potentiallyProblematicString: string,
-  client: GeminiClient,
+  client: AIClient,
   abortSignal: AbortSignal,
 ): Promise<string> {
   const prompt = `

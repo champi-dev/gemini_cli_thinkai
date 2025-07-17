@@ -115,6 +115,9 @@ export class WebSearchTool extends BaseTool<
     const geminiClient = this.config.getGeminiClient();
 
     try {
+      if (!geminiClient.generateContent) {
+        throw new Error('AI client does not support content generation');
+      }
       const response = await geminiClient.generateContent(
         [{ role: 'user', parts: [{ text: params.query }] }],
         { tools: [{ googleSearch: {} }] },
