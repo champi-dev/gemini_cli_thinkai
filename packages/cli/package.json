@@ -1,10 +1,11 @@
 {
-  "name": "@google/gemini-cli",
+  "name": "@champi-dev/thinkai-cli",
   "version": "0.1.1",
-  "description": "Gemini CLI",
+  "description": "Think AI CLI - Command-line AI workflow tool powered by Think AI",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
+    "thinkai": "dist/index.js",
     "gemini": "dist/index.js"
   },
   "scripts": {

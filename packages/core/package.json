@@ -1,7 +1,7 @@
 {
-  "name": "@google/gemini-cli-core",
+  "name": "@champi-dev/thinkai-cli-core",
   "version": "0.1.1",
-  "description": "Gemini CLI Server",
+  "description": "Think AI CLI Core - Core library for Think AI CLI",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

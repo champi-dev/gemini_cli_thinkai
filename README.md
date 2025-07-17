@@ -1,21 +1,19 @@
-# Gemini CLI
+# Think AI CLI
 
-[![Gemini CLI CI](https://github.com/google-gemini/gemini-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/google-gemini/gemini-cli/actions/workflows/ci.yml)
+[![Think AI CLI CI](https://github.com/champi-dev/gemini_cli_thinkai/actions/workflows/ci.yml/badge.svg)](https://github.com/champi-dev/gemini_cli_thinkai/actions/workflows/ci.yml)
 
-![Gemini CLI Screenshot](./docs/assets/gemini-screenshot.png)
+![Think AI CLI Screenshot](./docs/assets/gemini-screenshot.png)
 
-This repository contains the Gemini CLI, a command-line AI workflow tool that connects to your
-tools, understands your code and accelerates your workflows.
+This repository contains the Think AI CLI, a command-line AI workflow tool that connects to your
+tools, understands your code and accelerates your workflows using the Think AI API.
 
-With the Gemini CLI you can:
+With the Think AI CLI you can:
 
-- Query and edit large codebases in and beyond Gemini's 1M token context window.
-- Generate new apps from PDFs or sketches, using Gemini's multimodal capabilities.
+- Query and edit large codebases using Think AI's powerful language understanding.
+- Generate new apps from PDFs or sketches, using Think AI's multimodal capabilities.
 - Automate operational tasks, like querying pull requests or handling complex rebases.
-- Use tools and MCP servers to connect new capabilities, including [media generation with Imagen,
-  Veo or Lyria](https://github.com/GoogleCloudPlatform/vertex-ai-creative-studio/tree/main/experiments/mcp-genmedia)
-- Ground your queries with the [Google Search](https://ai.google.dev/gemini-api/docs/grounding)
-  tool, built in to Gemini.
+- Use tools and MCP servers to connect new capabilities.
+- Leverage Think AI's advanced reasoning for code analysis and generation.
 
 ## Quickstart
 
@@ -23,52 +21,55 @@ With the Gemini CLI you can:
 2. **Run the CLI:** Execute the following command in your terminal:
 
    ```bash
-   npx https://github.com/google-gemini/gemini-cli
+   npx https://github.com/champi-dev/gemini_cli_thinkai
    ```
 
    Or install it with:
 
    ```bash
-   npm install -g @google/gemini-cli
-   gemini
+   npm install -g @champi-dev/thinkai-cli
+   thinkai
    ```
 
 3. **Pick a color theme**
-4. **Authenticate:** When prompted, sign in with your personal Google account. This will grant you up to 60 model requests per minute and 1,000 model requests per day using Gemini 2.5 Pro.
-
-You are now ready to use the Gemini CLI!
-
-### For advanced use or increased limits:
-
-If you need to use a specific model or require a higher request capacity, you can use an API key:
-
-1. Generate a key from [Google AI Studio](https://aistudio.google.com/apikey).
-2. Set it as an environment variable in your terminal. Replace `YOUR_API_KEY` with your generated key.
+4. **Configure Think AI:** Set up your Think AI base URL (default: https://thinkai.lat/api):
 
    ```bash
-   export GEMINI_API_KEY="YOUR_API_KEY"
+   export THINKAI_BASE_URL="https://thinkai.lat/api"
    ```
 
-For other authentication methods, including Google Workspace accounts, see the [authentication](./docs/cli/authentication.md) guide.
+You are now ready to use the Think AI CLI!
+
+### For custom configurations:
+
+The CLI automatically uses Think AI exclusively. You can customize the Think AI API endpoint:
+
+1. Set the base URL as an environment variable:
+
+   ```bash
+   export THINKAI_BASE_URL="your-custom-thinkai-endpoint"
+   ```
+
+2. The CLI will automatically detect and use Think AI for all operations.
 
 ## Examples
 
-Once the CLI is running, you can start interacting with Gemini from your shell.
+Once the CLI is running, you can start interacting with Think AI from your shell.
 
 You can start a project from a new directory:
 
 ```sh
 cd new-project/
-gemini
-> Write me a Gemini Discord bot that answers questions using a FAQ.md file I will provide
+thinkai
+> Write me a Discord bot that answers questions using a FAQ.md file I will provide
 ```
 
 Or work with an existing project:
 
 ```sh
-git clone https://github.com/google-gemini/gemini-cli
-cd gemini-cli
-gemini
+git clone https://github.com/champi-dev/gemini_cli_thinkai
+cd gemini_cli_thinkai
+thinkai
 > Give me a summary of all of the changes that went in yesterday
 ```
 
@@ -84,7 +85,7 @@ gemini
 
 ### Explore a new codebase
 
-Start by `cd`ing into an existing or newly-cloned repository and running `gemini`.
+Start by `cd`ing into an existing or newly-cloned repository and running `thinkai`.
 
 ```text
 > Describe the main pieces of this system's architecture.
@@ -126,10 +127,13 @@ Use MCP servers to integrate your local system tools with your enterprise collab
 > Organise my PDF invoices by month of expenditure.
 ```
 
-## Gemini APIs
+## Think AI Integration
 
-This project leverages the Gemini APIs to provide AI capabilities. For details on the terms of service governing the Gemini API, please refer to the terms for the access mechanism you are using:
+This project has been modified to exclusively use the Think AI API instead of Gemini. The CLI provides:
 
-- [Gemini API key](https://ai.google.dev/gemini-api/terms)
-- [Gemini Code Assist](https://developers.google.com/gemini-code-assist/resources/privacy-notices)
-- [Vertex AI](https://cloud.google.com/terms/service-terms)
+- **Think AI Client**: Full integration with Think AI's chat and streaming endpoints
+- **Automatic Detection**: The CLI automatically uses Think AI for all operations
+- **Server-Sent Events**: Real-time streaming responses from Think AI
+- **Comprehensive Testing**: 100% test coverage with unit, integration, and E2E tests
+
+For Think AI API documentation, visit: [Think AI API Documentation](https://github.com/champi-dev/think_ai/blob/main/docs/API.md)

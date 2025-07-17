@@ -1,11 +1,11 @@
 {
-  "name": "@google/gemini-cli",
+  "name": "@champi-dev/thinkai-cli",
   "version": "0.1.1",
   "type": "module",
   "workspaces": [
     "packages/*"
   ],
-  "repository": "google-gemini/gemini-cli",
+  "repository": "champi-dev/gemini_cli_thinkai",
   "config": {
     "sandboxImageUri": "us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.1"
   },
