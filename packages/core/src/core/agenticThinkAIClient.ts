@@ -14,6 +14,7 @@ import { Turn, ServerGeminiStreamEvent, GeminiEventType } from './turn.js';
 import { Content, Part, PartListUnion, FunctionCall } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
 import { getErrorMessage } from '../utils/errors.js';
+import * as path from 'path';
 
 /**
  * Agentic wrapper for ThinkAI client that can execute local tools
@@ -223,6 +224,141 @@ RESPOND WITH ONLY: general`;
   }
 
   /**
+   * Extract code blocks and suggested file names from AI response
+   */
+  private extractActionsFromAIResponse(response: string): FunctionCall[] {
+    const actions: FunctionCall[] = [];
+    
+    // Pattern to match code blocks with optional language identifier
+    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    
+    // Pattern to match code with line numbers (like in the user's example)
+    const numberedCodeRegex = /(?:^|\n)\s*1\s+(?:package|import|from|const|var|let|function|def|class|public)\s+[\s\S]*?(?=\n\n|\n\s*[A-Z]|$)/gm;
+    
+    // Pattern to extract file names from text like "save to main.go" or "file (e.g., main.go)"
+    const fileNamePatterns = [
+      /save (?:the code )?to (?:a file )?(?:named |called )?[`"']?([^\s`"']+)[`"']?/i,
+      /(?:file|named?|called?)\s*\(?(?:e\.g\.,?|:)?\s*[`"']?([^\s`"',)]+)[`"']?\)?/i,
+      /create (?:a )?(?:file )?[`"']?([^\s`"']+)[`"']?/i,
+      /([^\s]+\.\w+)/  // Any filename with extension
+    ];
+    
+    let match;
+    let fileIndex = 0;
+    
+    // First try standard code blocks
+    while ((match = codeBlockRegex.exec(response)) !== null) {
+      const language = match[1] || '';
+      const code = match[2].trim();
+      
+      // Skip non-code blocks (like shell commands)
+      if (language === 'sh' || language === 'bash' || language === 'shell') {
+        continue;
+      }
+      
+      // Try to find a filename mentioned near this code block
+      let fileName = '';
+      const searchStart = Math.max(0, match.index - 200);
+      const searchEnd = Math.min(response.length, match.index + match[0].length + 200);
+      const contextText = response.slice(searchStart, searchEnd);
+      
+      for (const pattern of fileNamePatterns) {
+        const fileMatch = contextText.match(pattern);
+        if (fileMatch && fileMatch[1]) {
+          fileName = fileMatch[1];
+          break;
+        }
+      }
+      
+      // If no filename found, generate one based on language
+      if (!fileName) {
+        const extensions: Record<string, string> = {
+          'go': 'main.go',
+          'golang': 'main.go',
+          'javascript': 'server.js',
+          'js': 'server.js',
+          'python': 'server.py',
+          'py': 'server.py',
+          'java': 'Main.java',
+          'cpp': 'main.cpp',
+          'c++': 'main.cpp',
+          'c': 'main.c',
+          'rust': 'main.rs',
+          'php': 'index.php',
+          'ruby': 'server.rb',
+          'typescript': 'server.ts',
+          'ts': 'server.ts'
+        };
+        
+        fileName = extensions[language.toLowerCase()] || `file${fileIndex}.txt`;
+        fileIndex++;
+      }
+      
+      // Create write_file action
+      actions.push({
+        name: 'write_file',
+        args: {
+          file_path: path.join(this.agenticConfig.getWorkingDir(), fileName),
+          content: code
+        }
+      });
+    }
+    
+    // If no code blocks found, try numbered code format
+    if (actions.length === 0) {
+      const numberedMatch = response.match(numberedCodeRegex);
+      if (numberedMatch) {
+        // Extract the numbered code and remove line numbers
+        const numberedCode = numberedMatch[0];
+        const cleanedCode = numberedCode
+          .split('\n')
+          .map(line => line.replace(/^\s*\d+\s+/, ''))
+          .join('\n')
+          .trim();
+        
+        // Detect language from content
+        let detectedLang = '';
+        let fileName = '';
+        
+        if (cleanedCode.includes('package main')) {
+          detectedLang = 'go';
+          fileName = 'main.go';
+        } else if (cleanedCode.includes('import') && cleanedCode.includes('from')) {
+          detectedLang = 'python';
+          fileName = 'server.py';
+        } else if (cleanedCode.includes('const') || cleanedCode.includes('require(')) {
+          detectedLang = 'javascript';
+          fileName = 'server.js';
+        } else if (cleanedCode.includes('public class')) {
+          detectedLang = 'java';
+          fileName = 'Main.java';
+        }
+        
+        // Try to find a better filename from the surrounding text
+        for (const pattern of fileNamePatterns) {
+          const fileMatch = response.match(pattern);
+          if (fileMatch && fileMatch[1]) {
+            fileName = fileMatch[1];
+            break;
+          }
+        }
+        
+        if (cleanedCode && fileName) {
+          actions.push({
+            name: 'write_file',
+            args: {
+              file_path: path.join(this.agenticConfig.getWorkingDir(), fileName),
+              content: cleanedCode
+            }
+          });
+        }
+      }
+    }
+    
+    return actions;
+  }
+
+  /**
    * Executes local tools based on function calls
    */
   private async executeLocalTools(toolCalls: FunctionCall[]): Promise<string> {
@@ -387,6 +523,22 @@ RESPOND WITH ONLY: general`;
             yield {
               type: GeminiEventType.Content,
               value: chunk
+            };
+          }
+          
+          // After getting AI response, check if it contains code blocks to extract
+          const extractedActions = this.extractActionsFromAIResponse(response);
+          if (extractedActions.length > 0) {
+            yield {
+              type: GeminiEventType.Content,
+              value: '\n\n✦ Detected code in response. Creating files...\n'
+            };
+            
+            const executionResults = await this.executeLocalTools(extractedActions);
+            
+            yield {
+              type: GeminiEventType.Content,
+              value: executionResults
             };
           }
         } catch (streamError) {

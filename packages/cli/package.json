@@ -1,6 +1,6 @@
 {
   "name": "@champi-dev/thinkai-cli",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Think AI CLI - Command-line AI workflow tool powered by Think AI",
   "type": "module",
   "main": "dist/index.js",
