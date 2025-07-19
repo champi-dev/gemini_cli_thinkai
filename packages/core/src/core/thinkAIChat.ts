@@ -219,8 +219,8 @@ export class ThinkAIChat {
       // Convert the conversation to ThinkAI format
       const message = this.convertHistoryToMessage();
       
-      // Send to ThinkAI
-      const thinkAIResponse = await this.client.sendMessageToThinkAI(message, 'code');
+      // Send to ThinkAI using configured mode
+      const thinkAIResponse = await this.client.sendMessageToThinkAI(message, this.config.getThinkAIMode());
       
       // Convert response back to Gemini format
       response = this.convertThinkAIResponseToGemini(
@@ -283,8 +283,8 @@ export class ThinkAIChat {
       // Convert the conversation to ThinkAI format
       const message = this.convertHistoryToMessage();
       
-      // Stream from ThinkAI
-      const stream = this.client.sendMessageStreamToThinkAI(message, 'code');
+      // Stream from ThinkAI using configured mode
+      const stream = this.client.sendMessageStreamToThinkAI(message, this.config.getThinkAIMode());
       
       const result = this.processStreamResponse(stream, userContent, startTime);
       

@@ -128,6 +128,7 @@ export interface ConfigParameters {
   bugCommand?: BugCommandSettings;
   model: string;
   extensionContextFilePaths?: string[];
+  thinkAIMode?: 'general' | 'code';
 }
 
 export class Config {
@@ -167,6 +168,7 @@ export class Config {
   private readonly model: string;
   private readonly extensionContextFilePaths: string[];
   private modelSwitchedDuringSession: boolean = false;
+  private readonly thinkAIMode: 'general' | 'code';
   flashFallbackHandler?: FlashFallbackHandler;
 
   constructor(params: ConfigParameters) {
@@ -209,6 +211,7 @@ export class Config {
     this.bugCommand = params.bugCommand;
     this.model = params.model;
     this.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
+    this.thinkAIMode = params.thinkAIMode ?? 'code';
 
     if (params.contextFileName) {
       setGeminiMdFilename(params.contextFileName);
@@ -454,6 +457,10 @@ export class Config {
       await this.gitService.initialize();
     }
     return this.gitService;
+  }
+
+  getThinkAIMode(): 'general' | 'code' {
+    return this.thinkAIMode;
   }
 }
 

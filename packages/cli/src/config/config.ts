@@ -9,6 +9,7 @@ import { hideBin } from 'yargs/helpers';
 import process from 'node:process';
 import {
   Config,
+  ConfigParameters,
   loadServerHierarchicalMemory,
   setGeminiMdFilename as setServerGeminiMdFilename,
   getCurrentGeminiMdFilename,
@@ -245,7 +246,8 @@ export async function loadCliConfig(
     bugCommand: settings.bugCommand,
     model: argv.model!,
     extensionContextFilePaths,
-  });
+    thinkAIMode: settings.thinkAIMode,
+  } as ConfigParameters);
 }
 
 function mergeMcpServers(settings: Settings, extensions: Extension[]) {

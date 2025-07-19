@@ -254,18 +254,76 @@ ${folderStructure}
       return new Turn(this.getChat() as any);
     }
 
-    const turn = new Turn(this.getChat() as any);
-    const resultStream = turn.run(request, signal);
-    for await (const event of resultStream) {
-      yield event;
+    // Convert PartListUnion to string message for ThinkAI
+    let message: string;
+    if (typeof request === 'string') {
+      message = request;
+    } else if (Array.isArray(request)) {
+      message = request.map(part => {
+        if (typeof part === 'string') {
+          return part;
+        } else if (part && typeof part === 'object' && 'text' in part) {
+          return (part as any).text || '';
+        }
+        return '';
+      }).join(' ');
+    } else if (request && typeof request === 'object' && 'text' in request) {
+      message = (request as any).text || '';
+    } else {
+      message = String(request);
+    }
+
+    if (!message.trim()) {
+      return new Turn(this.getChat() as any);
+    }
+
+    try {
+      // Add user message to chat history
+      this.getChat().addHistory({
+        role: 'user',
+        parts: [{ text: message }]
+      });
+
+      // Stream from ThinkAI API
+      const stream = this.sendMessageStreamToThinkAI(message, 'code');
+      let fullResponse = '';
+
+      for await (const chunk of stream) {
+        if (signal.aborted) {
+          break;
+        }
+        
+        fullResponse += chunk;
+        
+        // Yield content events in the expected format
+        yield {
+          type: GeminiEventType.Content,
+          value: chunk
+        };
+      }
+
+      // Add assistant response to chat history
+      if (!signal.aborted && fullResponse.trim()) {
+        this.getChat().addHistory({
+          role: 'model',
+          parts: [{ text: fullResponse }]
+        });
+      }
+
+    } catch (error) {
+      // Yield error event in the expected format
+      yield {
+        type: GeminiEventType.Error,
+        value: {
+          error: {
+            message: getErrorMessage(error),
+            status: 500
+          }
+        }
+      };
     }
     
-    if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
-      const nextRequest = [{ text: 'Please continue.' }];
-      yield* this.sendMessageStream(nextRequest, signal, turns - 1);
-    }
-    
-    return turn;
+    return new Turn(this.getChat() as any);
   }
 
   async sendMessageToThinkAI(message: string, mode: 'general' | 'code' = 'code'): Promise<ThinkAIResponse> {
@@ -303,42 +361,51 @@ ${folderStructure}
     };
 
     try {
-      const stream = await this.makeStreamRequest('/chat/stream', {
-        method: 'POST',
-        body: JSON.stringify(request),
-      });
+      // Try streaming first, but fall back to regular API if it fails
+      try {
+        const stream = await this.makeStreamRequest('/chat/stream', {
+          method: 'POST',
+          body: JSON.stringify(request),
+        });
 
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const reader = stream.getReader();
+        const decoder = new TextDecoder();
         
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]' || data === '') {
-              continue;
-            }
-            
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.chunk) {
-                yield parsed.chunk;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]' || data === '') {
+                continue;
               }
               
-              if (parsed.done) {
-                return;
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.chunk) {
+                  yield parsed.chunk;
+                }
+                
+                if (parsed.done) {
+                  return;
+                }
+              } catch (error) {
+                console.warn('Failed to parse stream data:', data);
               }
-            } catch (error) {
-              console.warn('Failed to parse stream data:', data);
             }
           }
         }
+      } catch (streamError) {
+        // Fallback to regular chat API if streaming fails
+        console.warn('Streaming failed, falling back to regular API');
+        const response = await this.sendMessageToThinkAI(message, mode);
+        yield response.response;
+        return;
       }
     } catch (error) {
       await reportError(

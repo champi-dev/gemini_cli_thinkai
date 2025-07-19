@@ -117,7 +117,7 @@ describe('ThinkAI Integration Tests', () => {
 
       // Check history
       const history = chat.getHistory();
-      expect(history).toHaveLength(4); // 2 user messages + 2 model responses
+      expect(history).toHaveLength(6); // 2 user messages + 2 model responses + system setup
       expect(history[0].role).toBe('user');
       expect(history[1].role).toBe('model');
       expect(history[2].role).toBe('user');
@@ -126,9 +126,9 @@ describe('ThinkAI Integration Tests', () => {
 
     it('should handle streaming conversation', async () => {
       const mockStreamData = [
-        'data: {"data": "Hello", "session_id": "test", "finished": false}\n',
-        'data: {"data": "! How can", "session_id": "test", "finished": false}\n',
-        'data: {"data": " I help you?", "session_id": "test", "finished": true}\n',
+        'data: {"chunk": "Hello", "done": false}\n',
+        'data: {"chunk": "! How can", "done": false}\n',
+        'data: {"chunk": " I help you?", "done": true}\n',
       ];
 
       const mockStream = new ReadableStream({

@@ -138,9 +138,9 @@ describe('clientFactory', () => {
   });
 
   describe('detectClientType', () => {
-    it('should return GEMINI by default', () => {
+    it('should return THINKAI by default (exclusively Think AI)', () => {
       const clientType = detectClientType(mockConfig);
-      expect(clientType).toBe(ClientType.GEMINI);
+      expect(clientType).toBe(ClientType.THINKAI);
     });
 
     it('should return THINKAI when USE_THINKAI is true', () => {
@@ -165,34 +165,34 @@ describe('clientFactory', () => {
       expect(clientType).toBe(ClientType.THINKAI);
     });
 
-    it('should return GEMINI when USE_THINKAI is false', () => {
+    it('should return THINKAI when USE_THINKAI is false (exclusively Think AI)', () => {
       process.env.USE_THINKAI = 'false';
       
       const clientType = detectClientType(mockConfig);
-      expect(clientType).toBe(ClientType.GEMINI);
+      expect(clientType).toBe(ClientType.THINKAI);
     });
 
-    it('should return GEMINI when USE_THINKAI is empty string', () => {
+    it('should return THINKAI when USE_THINKAI is empty string (exclusively Think AI)', () => {
       process.env.USE_THINKAI = '';
       
       const clientType = detectClientType(mockConfig);
-      expect(clientType).toBe(ClientType.GEMINI);
+      expect(clientType).toBe(ClientType.THINKAI);
     });
   });
 
   describe('createAutoDetectedClient', () => {
-    it('should create Gemini client when auto-detected as GEMINI', async () => {
-      const mockGeminiClient = {
+    it('should create ThinkAI client when auto-detected (exclusively Think AI)', async () => {
+      const mockThinkAIClient = {
         initialize: vi.fn(),
       };
-      vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClient as any);
+      vi.mocked(ThinkAIClient).mockImplementation(() => mockThinkAIClient as any);
       
       const contentGeneratorConfig = { authType: 'test' as any, model: 'test-model' };
       const client = await createAutoDetectedClient(mockConfig, contentGeneratorConfig);
       
-      expect(GeminiClient).toHaveBeenCalledWith(mockConfig);
-      expect(mockGeminiClient.initialize).toHaveBeenCalledWith(contentGeneratorConfig);
-      expect(client).toBe(mockGeminiClient);
+      expect(ThinkAIClient).toHaveBeenCalledWith(mockConfig, 'https://thinkai.lat/api');
+      expect(mockThinkAIClient.initialize).toHaveBeenCalled();
+      expect(client).toBe(mockThinkAIClient);
     });
 
     it('should create ThinkAI client when auto-detected as THINKAI', async () => {
@@ -226,17 +226,17 @@ describe('clientFactory', () => {
       expect(client).toBe(mockThinkAIClient);
     });
 
-    it('should work without contentGeneratorConfig', async () => {
-      const mockGeminiClient = {
+    it('should work without contentGeneratorConfig (exclusively Think AI)', async () => {
+      const mockThinkAIClient = {
         initialize: vi.fn(),
       };
-      vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClient as any);
+      vi.mocked(ThinkAIClient).mockImplementation(() => mockThinkAIClient as any);
       
       const client = await createAutoDetectedClient(mockConfig);
       
-      expect(GeminiClient).toHaveBeenCalledWith(mockConfig);
-      expect(mockGeminiClient.initialize).not.toHaveBeenCalled();
-      expect(client).toBe(mockGeminiClient);
+      expect(ThinkAIClient).toHaveBeenCalledWith(mockConfig, 'https://thinkai.lat/api');
+      expect(mockThinkAIClient.initialize).toHaveBeenCalled();
+      expect(client).toBe(mockThinkAIClient);
     });
   });
 
@@ -286,11 +286,7 @@ describe('clientFactory', () => {
   });
 
   describe('performHealthCheck', () => {
-    it('should return healthy status for both clients', async () => {
-      // Mock successful Gemini client creation
-      const mockGeminiClient = {};
-      vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClient as any);
-      
+    it('should return healthy status for Think AI client only', async () => {
       // Mock successful ThinkAI client creation and health check
       const mockThinkAIClient = {
         healthCheck: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -300,23 +296,16 @@ describe('clientFactory', () => {
       const result = await performHealthCheck(mockConfig);
       
       expect(result).toEqual({
-        gemini: true,
+        gemini: false, // We don't use Gemini anymore
         thinkai: true,
         errors: [],
       });
       
-      expect(GeminiClient).toHaveBeenCalledWith(mockConfig);
       expect(ThinkAIClient).toHaveBeenCalledWith(mockConfig);
       expect(mockThinkAIClient.healthCheck).toHaveBeenCalled();
     });
 
-    it('should handle Gemini client creation error', async () => {
-      // Mock failed Gemini client creation
-      const geminiError = new Error('Gemini initialization failed');
-      vi.mocked(GeminiClient).mockImplementation(() => {
-        throw geminiError;
-      });
-      
+    it('should handle successful Think AI client (no Gemini check)', async () => {
       // Mock successful ThinkAI client
       const mockThinkAIClient = {
         healthCheck: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -326,17 +315,13 @@ describe('clientFactory', () => {
       const result = await performHealthCheck(mockConfig);
       
       expect(result).toEqual({
-        gemini: false,
+        gemini: false, // We don't check Gemini anymore
         thinkai: true,
-        errors: ['Gemini client error: Gemini initialization failed'],
+        errors: [],
       });
     });
 
     it('should handle ThinkAI client creation error', async () => {
-      // Mock successful Gemini client creation
-      const mockGeminiClient = {};
-      vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClient as any);
-      
       // Mock failed ThinkAI client creation
       const thinkAIError = new Error('ThinkAI initialization failed');
       vi.mocked(ThinkAIClient).mockImplementation(() => {
@@ -346,17 +331,13 @@ describe('clientFactory', () => {
       const result = await performHealthCheck(mockConfig);
       
       expect(result).toEqual({
-        gemini: true,
+        gemini: false, // We don't use Gemini anymore
         thinkai: false,
         errors: ['ThinkAI client error: ThinkAI initialization failed'],
       });
     });
 
     it('should handle ThinkAI health check failure', async () => {
-      // Mock successful Gemini client creation
-      const mockGeminiClient = {};
-      vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClient as any);
-      
       // Mock ThinkAI client with failed health check
       const mockThinkAIClient = {
         healthCheck: vi.fn().mockResolvedValue(null),
@@ -366,17 +347,13 @@ describe('clientFactory', () => {
       const result = await performHealthCheck(mockConfig);
       
       expect(result).toEqual({
-        gemini: true,
+        gemini: false, // We don't use Gemini anymore
         thinkai: false,
         errors: [],
       });
     });
 
     it('should handle ThinkAI health check error', async () => {
-      // Mock successful Gemini client creation
-      const mockGeminiClient = {};
-      vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClient as any);
-      
       // Mock ThinkAI client with health check error
       const healthCheckError = new Error('Health check failed');
       const mockThinkAIClient = {
@@ -387,19 +364,13 @@ describe('clientFactory', () => {
       const result = await performHealthCheck(mockConfig);
       
       expect(result).toEqual({
-        gemini: true,
+        gemini: false, // We don't use Gemini anymore
         thinkai: false,
         errors: ['ThinkAI client error: Health check failed'],
       });
     });
 
-    it('should handle both clients failing', async () => {
-      // Mock failed Gemini client creation
-      const geminiError = new Error('Gemini failed');
-      vi.mocked(GeminiClient).mockImplementation(() => {
-        throw geminiError;
-      });
-      
+    it('should handle Think AI client failing', async () => {
       // Mock failed ThinkAI client creation
       const thinkAIError = new Error('ThinkAI failed');
       vi.mocked(ThinkAIClient).mockImplementation(() => {
@@ -409,21 +380,15 @@ describe('clientFactory', () => {
       const result = await performHealthCheck(mockConfig);
       
       expect(result).toEqual({
-        gemini: false,
+        gemini: false, // We don't check Gemini anymore
         thinkai: false,
         errors: [
-          'Gemini client error: Gemini failed',
           'ThinkAI client error: ThinkAI failed',
         ],
       });
     });
 
     it('should handle non-Error objects', async () => {
-      // Mock failed Gemini client creation with non-Error
-      vi.mocked(GeminiClient).mockImplementation(() => {
-        throw 'String error';
-      });
-      
       // Mock failed ThinkAI client creation with non-Error
       vi.mocked(ThinkAIClient).mockImplementation(() => {
         throw { message: 'Object error' };
@@ -435,7 +400,6 @@ describe('clientFactory', () => {
         gemini: false,
         thinkai: false,
         errors: [
-          'Gemini client error: String error',
           'ThinkAI client error: [object Object]',
         ],
       });

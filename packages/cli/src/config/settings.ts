@@ -64,6 +64,9 @@ export interface Settings {
   // UI setting. Does not display the ANSI-controlled terminal title.
   hideWindowTitle?: boolean;
 
+  // ThinkAI mode setting - defaults to 'code' for optimal programming assistance
+  thinkAIMode?: 'general' | 'code';
+
   // Add other settings here.
 }
 

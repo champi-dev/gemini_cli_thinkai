@@ -108,7 +108,7 @@ export function configureThinkAI(baseURL?: string, enable: boolean = true): void
 }
 
 /**
- * Health check utility to verify both clients are working
+ * Health check utility to verify Think AI client is working
  */
 export async function performHealthCheck(config: Config): Promise<{
   gemini: boolean;
@@ -116,19 +116,9 @@ export async function performHealthCheck(config: Config): Promise<{
   errors: string[];
 }> {
   const errors: string[] = [];
-  let geminiHealthy = false;
   let thinkaiHealthy = false;
   
-  // Test Gemini client
-  try {
-    const geminiClient = new GeminiClient(config);
-    // Just try to create the client - actual health check would need proper auth
-    geminiHealthy = true;
-  } catch (error) {
-    errors.push(`Gemini client error: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  
-  // Test ThinkAI client
+  // Test ThinkAI client only (we exclusively use Think AI now)
   try {
     const thinkAIClient = new ThinkAIClient(config);
     const health = await thinkAIClient.healthCheck();
@@ -138,7 +128,7 @@ export async function performHealthCheck(config: Config): Promise<{
   }
   
   return {
-    gemini: geminiHealthy,
+    gemini: false, // We don't use Gemini anymore
     thinkai: thinkaiHealthy,
     errors,
   };

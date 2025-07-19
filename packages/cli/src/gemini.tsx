@@ -101,15 +101,9 @@ export async function main() {
   const extensions = loadExtensions(workspaceRoot);
   const config = await loadCliConfig(settings.merged, extensions, sessionId);
 
-  // set default fallback to gemini api key
-  // this has to go after load cli becuase thats where the env is set
-  if (!settings.merged.selectedAuthType && process.env.GEMINI_API_KEY) {
-    settings.setValue(
-      SettingScope.User,
-      'selectedAuthType',
-      AuthType.USE_GEMINI,
-    );
-  }
+  // Initialize ThinkAI client (no authentication required)
+  // Since we use ThinkAI exclusively, initialize it directly without auth
+  await config.refreshAuth(AuthType.USE_GEMINI); // This will create ThinkAI client via factory
 
   setMaxSizedBoxDebugging(config.getDebugMode());
 

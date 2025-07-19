@@ -291,9 +291,9 @@ describe('ThinkAIClient', () => {
 
     it('should stream message successfully', async () => {
       const mockStreamData = [
-        'data: {"data": "Hello", "session_id": "test", "finished": false}\n',
-        'data: {"data": " World", "session_id": "test", "finished": false}\n',
-        'data: {"data": "!", "session_id": "test", "finished": true}\n',
+        'data: {"chunk": "Hello", "done": false}\n',
+        'data: {"chunk": " World", "done": false}\n',
+        'data: {"chunk": "!", "done": true}\n',
       ];
       
       const mockStream = new ReadableStream({
@@ -337,9 +337,9 @@ describe('ThinkAIClient', () => {
 
     it('should handle malformed stream data gracefully', async () => {
       const mockStreamData = [
-        'data: {"data": "Hello", "session_id": "test", "finished": false}\n',
+        'data: {"chunk": "Hello", "done": false}\n',
         'data: invalid json\n',
-        'data: {"data": "World", "session_id": "test", "finished": true}\n',
+        'data: {"chunk": "World", "done": true}\n',
       ];
       
       const mockStream = new ReadableStream({
@@ -595,6 +595,219 @@ describe('ThinkAIClient', () => {
     it('should return null for forced compression', async () => {
       const result = await client.tryCompressChat(true);
       expect(result).toBeNull();
+    });
+  });
+
+  describe('sendMessageStream', () => {
+    let mockChat: any;
+
+    beforeEach(async () => {
+      mockChat = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        setHistory: vi.fn(),
+      };
+      vi.mocked(ThinkAIChat).mockImplementation(() => mockChat);
+      await client.initialize();
+    });
+
+    it('should handle string request', async () => {
+      const mockStreamData = [
+        'data: {"chunk": "Hello", "done": false}\n',
+        'data: {"chunk": " World", "done": true}\n',
+      ];
+      
+      const mockStream = new ReadableStream({
+        start(controller) {
+          mockStreamData.forEach(chunk => {
+            controller.enqueue(new TextEncoder().encode(chunk));
+          });
+          controller.close();
+        },
+      });
+      
+      mockFetch.mockResolvedValue({
+        ok: true,
+        body: mockStream,
+      });
+
+      const abortController = new AbortController();
+      const generator = client.sendMessageStream('Hello', abortController.signal);
+      
+      const events = [];
+      for await (const event of generator) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(2);
+      expect(events[0].type).toBe('content');
+      expect(events[0].value).toBe('Hello');
+      expect(mockChat.addHistory).toHaveBeenCalledWith({
+        role: 'user',
+        parts: [{ text: 'Hello' }]
+      });
+    });
+
+    it('should handle array request with mixed types', async () => {
+      const mockStreamData = [
+        'data: {"chunk": "Response", "done": true}\n',
+      ];
+      
+      const mockStream = new ReadableStream({
+        start(controller) {
+          mockStreamData.forEach(chunk => {
+            controller.enqueue(new TextEncoder().encode(chunk));
+          });
+          controller.close();
+        },
+      });
+      
+      mockFetch.mockResolvedValue({
+        ok: true,
+        body: mockStream,
+      });
+
+      const abortController = new AbortController();
+      const request = [
+        'Hello',
+        { text: 'World' },
+        'Test'
+      ];
+      
+      const generator = client.sendMessageStream(request, abortController.signal);
+      
+      const events = [];
+      for await (const event of generator) {
+        events.push(event);
+      }
+
+      expect(mockChat.addHistory).toHaveBeenCalledWith({
+        role: 'user',
+        parts: [{ text: 'Hello World Test' }]
+      });
+    });
+
+    it('should handle empty/null request', async () => {
+      const abortController = new AbortController();
+      const generator = client.sendMessageStream('', abortController.signal);
+      
+      const result = await generator.next();
+      
+      expect(result.done).toBe(true);
+    });
+
+    it('should handle stream errors properly', async () => {
+      const error = new Error('Stream error');
+      mockFetch.mockRejectedValue(error);
+
+      const abortController = new AbortController();
+      const generator = client.sendMessageStream('Hello', abortController.signal);
+      
+      const events = [];
+      for await (const event of generator) {
+        events.push(event);
+      }
+
+      // Should yield an error event
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('error');
+      expect(events[0].value.error.message).toBe('Stream error');
+    });
+
+    it('should handle aborted signal', async () => {
+      const mockStreamData = [
+        'data: {"chunk": "Hello", "done": false}\n',
+        'data: {"chunk": " World", "done": true}\n',
+      ];
+      
+      const mockStream = new ReadableStream({
+        start(controller) {
+          mockStreamData.forEach(chunk => {
+            controller.enqueue(new TextEncoder().encode(chunk));
+          });
+          controller.close();
+        },
+      });
+      
+      mockFetch.mockResolvedValue({
+        ok: true,
+        body: mockStream,
+      });
+
+      const abortController = new AbortController();
+      abortController.abort(); // Abort immediately
+      
+      const generator = client.sendMessageStream('Hello', abortController.signal);
+      
+      const events = [];
+      for await (const event of generator) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(0);
+    });
+  });
+
+  describe('generateContent', () => {
+    beforeEach(async () => {
+      await client.initialize();
+    });
+
+    it('should generate content successfully', async () => {
+      const mockResponse = { response: 'Generated content' };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const contents = [
+        { parts: [{ text: 'Generate content for:' }, { text: 'test' }] }
+      ];
+      const abortController = new AbortController();
+      
+      const result = await client.generateContent(contents, {}, abortController.signal);
+      
+      expect(result.candidates[0].content.parts[0].text).toBe('Generated content');
+    });
+  });
+
+  describe('generateJson', () => {
+    beforeEach(async () => {
+      await client.initialize();
+    });
+
+    it('should generate valid JSON', async () => {
+      const mockResponse = { response: '{"result": "success"}' };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const contents = [
+        { parts: [{ text: 'Generate JSON' }] }
+      ];
+      const abortController = new AbortController();
+      
+      const result = await client.generateJson(contents, {}, abortController.signal);
+      
+      expect(result).toEqual({ result: 'success' });
+    });
+
+    it('should handle invalid JSON response', async () => {
+      const mockResponse = { response: 'invalid json response' };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const contents = [
+        { parts: [{ text: 'Generate JSON' }] }
+      ];
+      const abortController = new AbortController();
+      
+      const result = await client.generateJson(contents, {}, abortController.signal);
+      
+      expect(result).toEqual({ result: 'invalid json response' });
     });
   });
 });
