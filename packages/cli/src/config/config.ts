@@ -214,7 +214,7 @@ export async function loadCliConfig(
     mcpServers,
     userMemory: memoryContent,
     geminiMdFileCount: fileCount,
-    approvalMode: argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT,
+    approvalMode: argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.AUTO_EDIT,
     showMemoryUsage:
       argv.show_memory_usage || settings.showMemoryUsage || false,
     accessibility: settings.accessibility,

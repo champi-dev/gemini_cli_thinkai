@@ -230,8 +230,8 @@ async function loadNonInteractiveConfig(
   settings: LoadedSettings,
 ) {
   let finalConfig = config;
-  if (config.getApprovalMode() !== ApprovalMode.YOLO) {
-    // Everything is not allowed, ensure that only read-only tools are configured.
+  if (config.getApprovalMode() === ApprovalMode.DEFAULT) {
+    // In DEFAULT mode, exclude all interactive tools for safety
     const existingExcludeTools = settings.merged.excludeTools || [];
     const interactiveTools = [
       ShellTool.Name,
@@ -252,7 +252,28 @@ async function loadNonInteractiveConfig(
       extensions,
       config.getSessionId(),
     );
+  } else if (config.getApprovalMode() === ApprovalMode.AUTO_EDIT) {
+    // In AUTO_EDIT mode, allow file operations but exclude shell commands
+    const existingExcludeTools = settings.merged.excludeTools || [];
+    const unsafeTools = [
+      ShellTool.Name,
+    ];
+
+    const newExcludeTools = [
+      ...new Set([...existingExcludeTools, ...unsafeTools]),
+    ];
+
+    const nonInteractiveSettings = {
+      ...settings.merged,
+      excludeTools: newExcludeTools,
+    };
+    finalConfig = await loadCliConfig(
+      nonInteractiveSettings,
+      extensions,
+      config.getSessionId(),
+    );
   }
+  // If mode is YOLO, allow all tools (no exclusions)
 
   return await validateNonInterActiveAuth(
     settings.merged.selectedAuthType,

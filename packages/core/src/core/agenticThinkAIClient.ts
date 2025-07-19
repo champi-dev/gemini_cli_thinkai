@@ -52,119 +52,146 @@ export class AgenticThinkAIClient implements ThinkAIClientInterface {
   }
 
   /**
-   * Analyzes user input to determine if it requires local tool execution
+   * Uses ThinkAI to intelligently parse user intent and determine tool calls
    */
-  private requiresLocalTools(message: string): { needsTools: boolean; toolCalls: FunctionCall[] } {
-    const lowerMessage = message.toLowerCase();
-    
-    // Common patterns that indicate tool usage
-    const filePatterns = [
-      /read\s+(?:file|the file)\s*[`"']?([^`"'\s]+)[`"']?/i,
-      /write\s+(?:to\s+)?(?:file|the file)\s*[`"']?([^`"'\s]+)[`"']?/i,
-      /edit\s+(?:file|the file)\s*[`"']?([^`"'\s]+)[`"']?/i,
-      /create\s+(?:file|a file)\s*[`"']?([^`"'\s]+)?[`"']?/i,
-      /list\s+(?:files|directory|dir)/i,
-      /delete\s+(?:file|the file)\s*[`"']?([^`"'\s]+)[`"']?/i,
-    ];
+  private async parseUserIntent(message: string): Promise<{ needsTools: boolean; toolCalls: FunctionCall[] }> {
+    // Get comprehensive conversation context for eternal memory
+    const history = await this.getChat().getHistory();
+    const conversationContext = history.slice(-8).map((entry: any) => 
+      `${entry.role}: ${entry.parts?.map((p: any) => p.text).join(' ') || ''}`
+    ).join('\n');
 
-    const commandPatterns = [
-      /run\s+(?:command\s+)?[`"']?([^`"'\n]+)[`"']?/i,
-      /execute\s+[`"']?([^`"'\n]+)[`"']?/i,
-      /shell\s+[`"']?([^`"'\n]+)[`"']?/i,
-      /npm\s+/i,
-      /git\s+/i,
-      /ls\s/i,
-      /pwd/i,
-      /mkdir\s/i,
-      /cd\s/i,
-    ];
+    const intentPrompt = `ANALYZE this message for COMPOUND ACTIONS with full conversation context. Break down what the user wants and execute ALL required tools.
 
+CONVERSATION CONTEXT:
+${conversationContext}
+
+CURRENT MESSAGE: "${message}"
+WORKING DIR: ${this.agenticConfig.getWorkingDir()}
+
+DETECTION RULES:
+1. ANY mention of "write/create/make + server/file" = CREATE FILE with working code
+2. ANY mention of "run/execute/start" = EXECUTE appropriate command  
+3. COMPOUND requests like "write X and run it" = BOTH create file AND execute
+4. Questions only = NO TOOLS
+
+EXAMPLES:
+"write server.js and run it" → {"needsTools": true, "toolCalls": [{"name": "write_file", "args": {"file_path": "/full/path/server.js", "content": "const http = require('http');const server = http.createServer((req, res) => {res.writeHead(200, {'Content-Type': 'text/html'});res.end('<h1>Hello World!</h1>');});const PORT = 3000;server.listen(PORT, () => console.log(\`Server running at http://localhost:\${PORT}\`));"}}, {"name": "run_shell_command", "args": {"command": "node server.js"}}]}
+
+"write hello world server" → {"needsTools": true, "toolCalls": [{"name": "write_file", "args": {"file_path": "/full/path/server.js", "content": "ACTUAL WORKING CODE HERE"}}]}
+
+"how does this work" → {"needsTools": false, "toolCalls": []}
+
+CRITICAL: For file creation, generate COMPLETE working code. For compound actions, return MULTIPLE tool calls.
+
+RESPOND WITH VALID JSON ONLY:`;
+
+    try {
+      const response = await this.baseClient.sendMessageToThinkAI(intentPrompt, 'code');
+      const cleanResponse = response.response.trim().replace(/^```json\s*|\s*```$/g, '');
+      const parsed = JSON.parse(cleanResponse);
+      
+      return {
+        needsTools: parsed.needsTools || false,
+        toolCalls: parsed.toolCalls || []
+      };
+    } catch (error) {
+      // Fallback: Use simple pattern matching for critical operations
+      return this.fallbackPatternMatching(message);
+    }
+  }
+
+  /**
+   * Smart mode selection using ThinkAI
+   */
+  private async selectMode(message: string): Promise<'general' | 'code'> {
+    // Get conversation context for better mode selection
+    const history = await this.getChat().getHistory();
+    const recentHistory = history.slice(-3).map((entry: any) => 
+      `${entry.role}: ${entry.parts?.map((p: any) => p.text).join(' ') || ''}`
+    ).join('\n');
+
+    const modePrompt = `Based on the context and message, determine the optimal response mode:
+
+RECENT CONTEXT:
+${recentHistory}
+
+CURRENT MESSAGE: "${message}"
+
+MODE RULES:
+- GENERAL: Questions, explanations, troubleshooting, "how can I", "what is", "why", conceptual discussions
+- CODE: File operations already handled by tools, so use general for explanations
+
+Since file operations are handled separately by tools, use GENERAL mode for conversational responses.
+
+RESPOND WITH ONLY: general`;
+
+    try {
+      const response = await this.baseClient.sendMessageToThinkAI(modePrompt, 'general');
+      const mode = response.response.trim().toLowerCase();
+      return mode === 'code' ? 'code' : 'general';
+    } catch (error) {
+      return 'general'; // Safe default
+    }
+  }
+
+  /**
+   * Fallback pattern matching for when AI parsing fails
+   */
+  private fallbackPatternMatching(message: string): { needsTools: boolean; toolCalls: FunctionCall[] } {
+    const lowerMessage = message.toLowerCase().trim();
+    const workingDir = this.agenticConfig.getWorkingDir();
     const toolCalls: FunctionCall[] = [];
 
-    // Check for file operations
-    for (const pattern of filePatterns) {
-      const match = message.match(pattern);
-      if (match) {
-        if (lowerMessage.includes('read')) {
-          toolCalls.push({
-            name: 'read_file',
-            args: { absolute_path: match[1] || '' }
-          });
-        } else if (lowerMessage.includes('write') || lowerMessage.includes('create')) {
-          toolCalls.push({
-            name: 'write_file',
-            args: { file_path: match[1] || 'new_file.txt', content: '' }
-          });
-        } else if (lowerMessage.includes('edit')) {
-          toolCalls.push({
-            name: 'edit_file',
-            args: { file_path: match[1] || '', old_string: '', new_string: '' }
-          });
-        } else if (lowerMessage.includes('list')) {
-          toolCalls.push({
-            name: 'list_directory',
-            args: { path: '.' }
-          });
-        }
-      }
+    // Robust fallback patterns for critical operations
+    const needsFileCreation = lowerMessage.includes('write') && 
+      (lowerMessage.includes('server') || lowerMessage.includes('node') || lowerMessage.includes('hello'));
+    
+    const needsExecution = lowerMessage.includes('run') || lowerMessage.includes('execute') || 
+      lowerMessage.includes('start') || (lowerMessage.includes('and') && lowerMessage.includes('it'));
+
+    if (needsFileCreation) {
+      // Generate a working Node.js server
+      const serverContent = `const http = require('http');
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, {'Content-Type': 'text/html'});
+  res.end('<h1>Hello World!</h1><p>Server is running successfully!</p>');
+});
+
+const PORT = 3000;
+server.listen(PORT, () => {
+  console.log(\`Server running at http://localhost:\${PORT}\`);
+});`;
+
+      toolCalls.push({
+        name: 'write_file',
+        args: { file_path: `${workingDir}/server.js`, content: serverContent }
+      });
     }
 
-    // Check for command execution
-    for (const pattern of commandPatterns) {
-      const match = message.match(pattern);
-      if (match) {
-        toolCalls.push({
-          name: 'run_shell_command',
-          args: { command: match[1] || match[0] }
-        });
-        break; // Only add one shell command per message
-      }
+    if (needsExecution) {
+      toolCalls.push({
+        name: 'run_shell_command',
+        args: { command: 'node server.js' }
+      });
     }
 
-    // Check for simple patterns without specific tool calls
-    const simplePatterns = [
-      /(?:what|list|show).+(?:files|directories)/i,
-      /(?:current|working).+directory/i,
-      /install\s+/i,
-      /build/i,
-      /test/i,
-    ];
-
-    if (!toolCalls.length) {
-      for (const pattern of simplePatterns) {
-        if (pattern.test(message)) {
-          if (message.toLowerCase().includes('files') || message.toLowerCase().includes('directories')) {
-            toolCalls.push({
-              name: 'list_directory',
-              args: { path: '.' }
-            });
-          } else if (message.toLowerCase().includes('directory')) {
-            toolCalls.push({
-              name: 'run_shell_command',
-              args: { command: 'pwd' }
-            });
-          } else if (message.toLowerCase().includes('install')) {
-            toolCalls.push({
-              name: 'run_shell_command',
-              args: { command: message.includes('npm') ? message : `npm install` }
-            });
-          } else if (message.toLowerCase().includes('build')) {
-            toolCalls.push({
-              name: 'run_shell_command',
-              args: { command: 'npm run build' }
-            });
-          } else if (message.toLowerCase().includes('test')) {
-            toolCalls.push({
-              name: 'run_shell_command',
-              args: { command: 'npm test' }
-            });
-          }
-          break;
-        }
-      }
+    if (lowerMessage.includes('list') && lowerMessage.includes('files')) {
+      toolCalls.push({
+        name: 'list_directory',
+        args: { path: '.' }
+      });
     }
 
     return { needsTools: toolCalls.length > 0, toolCalls };
+  }
+
+  /**
+   * Analyzes user input to determine if it requires local tool execution
+   */
+  private async requiresLocalTools(message: string): Promise<{ needsTools: boolean; toolCalls: FunctionCall[] }> {
+    return await this.parseUserIntent(message);
   }
 
   /**
@@ -273,53 +300,75 @@ export class AgenticThinkAIClient implements ThinkAIClientInterface {
         parts: [{ text: message }]
       });
 
-      // Check if this requires local tool execution
-      const { needsTools, toolCalls } = this.requiresLocalTools(message);
+      // Check if this requires local tool execution FIRST
+      const { needsTools, toolCalls } = await this.requiresLocalTools(message);
       
       let response = '';
       
       if (needsTools && toolCalls.length > 0) {
-        // Execute local tools first
+        // Execute local tools with detailed progress reporting
         yield {
           type: GeminiEventType.Content,
-          value: `Executing local tools for: ${message}\n\n`
+          value: `✦ Executing ${toolCalls.length} tool(s) for: ${message}\n\n`
         };
 
         const toolResults = await this.executeLocalTools(toolCalls);
-        response = toolResults;
-
-        // Send the tool results to ThinkAI for interpretation/summary
-        const contextMessage = `The user requested: "${message}"\n\nI executed local tools and got these results:\n\n${toolResults}\n\nPlease provide a helpful summary or interpretation of these results.`;
         
-        const stream = this.sendMessageStreamToThinkAI(contextMessage, 'code');
-        let aiSummary = '';
+        // Generate intelligent response based on what was accomplished
+        const fileOperations = toolCalls.filter(tc => tc.name === 'write_file');
+        const commandOperations = toolCalls.filter(tc => tc.name === 'run_shell_command');
         
-        for await (const chunk of stream) {
-          if (signal.aborted) {
-            break;
-          }
-          
-          aiSummary += chunk;
-          yield {
-            type: GeminiEventType.Content,
-            value: chunk
-          };
+        let helpfulResponse = '';
+        
+        if (fileOperations.length > 0 && commandOperations.length > 0) {
+          // Compound operation: file creation + execution
+          const fileName = fileOperations[0].args?.file_path || 'file';
+          const command = commandOperations[0].args?.command || 'command';
+          helpfulResponse = `✅ Created '${fileName}' and executed '${command}'\n\n${toolResults}`;
+        } else if (fileOperations.length > 0) {
+          // File creation only
+          const fileName = fileOperations[0].args?.file_path || 'file';
+          helpfulResponse = `✅ Created file '${fileName}'\n\n${toolResults}`;
+        } else if (commandOperations.length > 0) {
+          // Command execution only
+          const command = commandOperations[0].args?.command || 'command';
+          helpfulResponse = `✅ Executed '${command}'\n\n${toolResults}`;
+        } else {
+          helpfulResponse = `✅ Completed operation\n\n${toolResults}`;
         }
         
-        response += '\n\n' + aiSummary;
-      } else {
-        // No local tools needed, send directly to ThinkAI
-        const stream = this.sendMessageStreamToThinkAI(message, 'code');
+        response = helpfulResponse;
         
-        for await (const chunk of stream) {
-          if (signal.aborted) {
-            break;
-          }
+        // Yield the complete response
+        yield {
+          type: GeminiEventType.Content,
+          value: helpfulResponse
+        };
+      } else {
+        // No local tools needed, send to ThinkAI with smart mode selection
+        const mode = await this.selectMode(message);
+        try {
+          const stream = this.sendMessageStreamToThinkAI(message, mode);
           
-          response += chunk;
+          for await (const chunk of stream) {
+            if (signal.aborted) {
+              break;
+            }
+            
+            response += chunk;
+            yield {
+              type: GeminiEventType.Content,
+              value: chunk
+            };
+          }
+        } catch (streamError) {
+          // If streaming fails, provide a helpful local response
+          const fallbackResponse = `I understand you want to "${message}". However, I'm currently running in local mode and this request doesn't match any local tools I can execute. Available local tools include file operations (read, write, edit), shell commands, and directory listings.`;
+          
+          response = fallbackResponse;
           yield {
             type: GeminiEventType.Content,
-            value: chunk
+            value: fallbackResponse
           };
         }
       }

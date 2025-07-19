@@ -393,10 +393,17 @@ ${folderStructure}
         }
       } catch (streamError) {
         // Fallback to regular chat API if streaming fails
-        console.warn('Streaming failed, falling back to regular API');
-        const response = await this.sendMessageToThinkAI(message, mode);
-        yield response.response;
-        return;
+        // Only show warning in debug mode to reduce noise
+        if (this.config.getDebugMode()) {
+          console.warn('Streaming failed, falling back to regular API');
+        }
+        try {
+          const response = await this.sendMessageToThinkAI(message, mode);
+          yield response.response;
+          return;
+        } catch (fallbackError) {
+          throw new Error(`Both streaming and regular API failed: ${getErrorMessage(fallbackError)}`);
+        }
       }
     } catch (error) {
       await reportError(
