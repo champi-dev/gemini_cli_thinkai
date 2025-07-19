@@ -544,7 +544,7 @@ describe('ThinkAI End-to-End Tests', () => {
       const results = await Promise.all(promises);
       
       // Verify each session gets its own response
-      results.forEach((result, index) => {
+      results.forEach((result: any, index: number) => {
         expect(result.candidates?.[0]?.content?.parts?.[0]?.text).toContain(
           `session ${chats[index].getSessionId()}`
         );

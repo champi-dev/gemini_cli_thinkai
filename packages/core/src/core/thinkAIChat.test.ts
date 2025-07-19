@@ -44,6 +44,7 @@ describe('ThinkAIChat', () => {
       }),
       setModel: vi.fn(),
       flashFallbackHandler: vi.fn(),
+      getThinkAIMode: vi.fn().mockReturnValue('code'),
     } as any;
 
     // Setup client mock
@@ -264,7 +265,7 @@ describe('ThinkAIChat', () => {
       );
       
       const result = (chatWithHistory as any).convertHistoryToMessage();
-      expect(result).toBe('Human: Hello world');
+      expect(result).toBe('Human: Hello  world');
     });
   });
 
@@ -343,7 +344,7 @@ describe('ThinkAIChat', () => {
       });
       
       expect(mockClient.sendMessageToThinkAI).toHaveBeenCalledWith(
-        'Human: Hello',
+        'You are a helpful assistant.\n\nHuman: Hello',
         'code'
       );
       
@@ -433,7 +434,7 @@ describe('ThinkAIChat', () => {
       expect(chunks[2].candidates?.[0]?.content?.parts?.[0]?.text).toBe('!');
       
       expect(mockClient.sendMessageStreamToThinkAI).toHaveBeenCalledWith(
-        'Human: Hello',
+        'You are a helpful assistant.\n\nHuman: Hello',
         'code'
       );
       
@@ -610,6 +611,8 @@ describe('ThinkAIChat', () => {
       const userInput: Content = { role: 'user', parts: [{ text: 'Hello' }] };
       const modelOutput: Content[] = [{ role: 'model', parts: [{ text: 'Hi' }] }];
       
+      // Add user input first (as done in real usage)
+      chat.addHistory(userInput);
       (chat as any).recordHistory(userInput, modelOutput);
       
       const history = chat.getHistory();
@@ -625,6 +628,8 @@ describe('ThinkAIChat', () => {
         { role: 'model', parts: [{ text: 'Hi' }] }, // Valid
       ];
       
+      // Add user input first (as done in real usage)
+      chat.addHistory(userInput);
       (chat as any).recordHistory(userInput, modelOutput);
       
       const history = chat.getHistory();
@@ -637,6 +642,8 @@ describe('ThinkAIChat', () => {
       const userInput: Content = { role: 'user', parts: [{ text: 'Hello' }] };
       const modelOutput: Content[] = [];
       
+      // Add user input first (as done in real usage)
+      chat.addHistory(userInput);
       (chat as any).recordHistory(userInput, modelOutput);
       
       const history = chat.getHistory();

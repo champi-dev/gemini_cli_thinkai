@@ -384,7 +384,7 @@ describe('ThinkAI Integration Tests', () => {
       const results = await Promise.all(promises);
       
       expect(results).toHaveLength(3);
-      results.forEach((result, index) => {
+      results.forEach((result: any, index: number) => {
         expect(result.candidates?.[0]?.content?.parts?.[0]?.text).toBe(`Response ${index + 1}`);
       });
     });

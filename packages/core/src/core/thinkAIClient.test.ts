@@ -641,7 +641,7 @@ describe('ThinkAIClient', () => {
 
       expect(events).toHaveLength(2);
       expect(events[0].type).toBe('content');
-      expect(events[0].value).toBe('Hello');
+      expect((events[0] as any).value).toBe('Hello');
       expect(mockChat.addHistory).toHaveBeenCalledWith({
         role: 'user',
         parts: [{ text: 'Hello' }]
@@ -711,7 +711,7 @@ describe('ThinkAIClient', () => {
       // Should yield an error event
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe('error');
-      expect(events[0].value.error.message).toBe('Stream error');
+      expect((events[0] as any).value.error.message).toBe('Stream error');
     });
 
     it('should handle aborted signal', async () => {

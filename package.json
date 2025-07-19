@@ -1,6 +1,6 @@
 {
-  "name": "@champi-dev/thinkai-cli",
-  "version": "0.1.1",
+  "name": "thinkai-cli",
+  "version": "0.1.3",
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -48,7 +48,7 @@
     "start:gcp": "concurrently --raw --kill-others \"npm run telemetry -- --target=gcp\" \"npm start\""
   },
   "bin": {
-    "gemini": "bundle/gemini.js"
+    "thinkai": "bundle/gemini.js"
   },
   "files": [
     "bundle/",
@@ -81,5 +81,8 @@
   },
   "dependencies": {
     "@google/gemini-cli": "^0.1.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

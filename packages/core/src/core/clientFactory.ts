@@ -7,6 +7,7 @@
 import { Config } from '../config/config.js';
 import { GeminiClient } from './client.js';
 import { ThinkAIClient } from './thinkAIClient.js';
+import { AgenticThinkAIClient } from './agenticThinkAIClient.js';
 import { ContentGeneratorConfig } from './contentGenerator.js';
 
 export enum ClientType {
@@ -57,7 +58,7 @@ export async function createAIClient(factoryConfig: ClientFactoryConfig): Promis
       return geminiClient as any as AIClient;
       
     case ClientType.THINKAI:
-      const thinkAIClient = new ThinkAIClient(config, thinkAIBaseURL);
+      const thinkAIClient = new AgenticThinkAIClient(config, thinkAIBaseURL);
       await thinkAIClient.initialize();
       return thinkAIClient as any as AIClient;
       

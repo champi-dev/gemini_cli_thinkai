@@ -13,7 +13,7 @@ import {
   SendMessageParameters,
 } from '@google/genai';
 import { Config } from '../config/config.js';
-import { ThinkAIClient, ThinkAIMessage } from './thinkAIClient.js';
+import { ThinkAIClientInterface, ThinkAIMessage } from './thinkAITypes.js';
 import { reportError } from '../utils/errorReporting.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
@@ -42,7 +42,7 @@ export class ThinkAIChat {
 
   constructor(
     private readonly config: Config,
-    private readonly client: ThinkAIClient,
+    private readonly client: ThinkAIClientInterface,
     sessionId: string,
     private readonly chatConfig: ThinkAIChatConfig = {},
     private history: Content[] = []

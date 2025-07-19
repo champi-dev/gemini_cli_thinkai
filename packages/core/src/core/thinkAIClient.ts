@@ -6,7 +6,7 @@
 
 import { Config } from '../config/config.js';
 import { getCoreSystemPrompt } from './prompts.js';
-import { ThinkAIChat } from './thinkAIChat.js';
+// Lazy import to avoid circular dependency
 import { reportError } from '../utils/errorReporting.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { retryWithBackoff } from '../utils/retry.js';
@@ -20,34 +20,23 @@ import { Content, Part, PartListUnion } from '@google/genai';
 import { getFolderStructure } from '../utils/getFolderStructure.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 
-export interface ThinkAIMessage {
-  message: string;
-  session_id?: string;
-  mode?: 'general' | 'code';
-  use_web_search?: boolean;
-  fact_check?: boolean;
-}
+import type {
+  ThinkAIMessage,
+  ThinkAIResponse,
+  ThinkAIStreamResponse,
+  ThinkAIClientInterface
+} from './thinkAITypes.js';
 
-export interface ThinkAIResponse {
-  response: string;
-  session_id: string;
-  mode: string;
-  timestamp: string;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
+// Re-export types for backward compatibility
+export type {
+  ThinkAIMessage,
+  ThinkAIResponse,
+  ThinkAIStreamResponse,
+  ThinkAIClientInterface
+} from './thinkAITypes.js';
 
-export interface ThinkAIStreamResponse {
-  data: string;
-  session_id: string;
-  finished: boolean;
-}
-
-export class ThinkAIClient {
-  private chat?: ThinkAIChat;
+export class ThinkAIClient implements ThinkAIClientInterface {
+  private chat?: any; // ThinkAIChat - using any to avoid circular dependency
   private readonly baseURL: string;
   private readonly sessionId: string;
   readonly MAX_TURNS = 100;
@@ -109,7 +98,7 @@ export class ThinkAIClient {
     return response.body!;
   }
 
-  getChat(): ThinkAIChat {
+  getChat(): any { // ThinkAIChat
     if (!this.chat) {
       throw new Error('Chat not initialized');
     }
@@ -193,7 +182,7 @@ ${folderStructure}
     return initialParts;
   }
 
-  private async startChat(extraHistory?: Content[]): Promise<ThinkAIChat> {
+  private async startChat(extraHistory?: Content[]): Promise<any> { // Promise<ThinkAIChat>
     const envParts = await this.getEnvironment();
     const toolRegistry = await this.config.getToolRegistry();
     const toolDeclarations = toolRegistry ? toolRegistry.getFunctionDeclarations() : [];
@@ -214,6 +203,8 @@ ${folderStructure}
       const userMemory = this.config.getUserMemory();
       const systemInstruction = getCoreSystemPrompt(userMemory);
       
+      // Use dynamic import to avoid circular dependency
+      const { ThinkAIChat } = await import('./thinkAIChat.js');
       return new ThinkAIChat(
         this.config,
         this,
