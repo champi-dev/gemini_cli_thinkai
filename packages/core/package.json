@@ -1,6 +1,6 @@
 {
   "name": "@champi-dev/thinkai-cli-core",
-  "version": "0.2.3",
+  "version": "0.2.8",
   "description": "Think AI CLI Core - Core library for Think AI CLI",
   "type": "module",
   "main": "dist/index.js",

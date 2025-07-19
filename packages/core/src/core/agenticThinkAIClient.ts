@@ -55,48 +55,64 @@ export class AgenticThinkAIClient implements ThinkAIClientInterface {
    * Uses ThinkAI to intelligently parse user intent and determine tool calls
    */
   private async parseUserIntent(message: string): Promise<{ needsTools: boolean; toolCalls: FunctionCall[] }> {
-    // Get comprehensive conversation context for eternal memory
+    // Get conversation context
     const history = await this.getChat().getHistory();
-    const conversationContext = history.slice(-8).map((entry: any) => 
+    const conversationContext = history.slice(-5).map((entry: any) => 
       `${entry.role}: ${entry.parts?.map((p: any) => p.text).join(' ') || ''}`
     ).join('\n');
 
-    const intentPrompt = `ANALYZE this message for COMPOUND ACTIONS with full conversation context. Break down what the user wants and execute ALL required tools.
+    const intentPrompt = `You are a CLI tool parser. Based on the message and context, determine if local tools are needed and generate appropriate tool calls.
 
-CONVERSATION CONTEXT:
+CONTEXT:
 ${conversationContext}
 
-CURRENT MESSAGE: "${message}"
-WORKING DIR: ${this.agenticConfig.getWorkingDir()}
+MESSAGE: "${message}"
+WORKING_DIR: ${this.agenticConfig.getWorkingDir()}
 
-DETECTION RULES:
-1. ANY mention of "write/create/make + server/file" = CREATE FILE with working code
-2. ANY mention of "run/execute/start" = EXECUTE appropriate command  
-3. COMPOUND requests like "write X and run it" = BOTH create file AND execute
-4. Questions only = NO TOOLS
+TOOLS AVAILABLE:
+- write_file: Create files (args: file_path, content)
+- run_shell_command: Execute commands (args: command)
+- list_directory: List files (args: path)
 
-EXAMPLES:
-"write server.js and run it" → {"needsTools": true, "toolCalls": [{"name": "write_file", "args": {"file_path": "/full/path/server.js", "content": "const http = require('http');const server = http.createServer((req, res) => {res.writeHead(200, {'Content-Type': 'text/html'});res.end('<h1>Hello World!</h1>');});const PORT = 3000;server.listen(PORT, () => console.log(\`Server running at http://localhost:\${PORT}\`));"}}, {"name": "run_shell_command", "args": {"command": "node server.js"}}]}
+RULES:
+1. "write/create X server" → Generate complete working code using write_file
+2. "run/execute it" → Use context to determine what to run
+3. Questions → No tools needed
 
-"write hello world server" → {"needsTools": true, "toolCalls": [{"name": "write_file", "args": {"file_path": "/full/path/server.js", "content": "ACTUAL WORKING CODE HERE"}}]}
+For file creation, generate complete, working code based on the request. For Python servers, use http.server. For Node.js, use http module.
 
-"how does this work" → {"needsTools": false, "toolCalls": []}
-
-CRITICAL: For file creation, generate COMPLETE working code. For compound actions, return MULTIPLE tool calls.
-
-RESPOND WITH VALID JSON ONLY:`;
+Return JSON: {"needsTools": boolean, "toolCalls": [{"name": "tool", "args": {...}}]}`;
 
     try {
+      console.log('🤖 Sending to ThinkAI with prompt...');
       const response = await this.baseClient.sendMessageToThinkAI(intentPrompt, 'code');
-      const cleanResponse = response.response.trim().replace(/^```json\s*|\s*```$/g, '');
+      console.log('📥 Raw AI response:', response.response);
+      
+      // Clean and parse response
+      let cleanResponse = response.response.trim();
+      
+      // Remove markdown code blocks if present
+      cleanResponse = cleanResponse.replace(/^```(?:json)?\s*|\s*```$/gm, '');
+      
+      // Try to extract JSON if it's embedded in text
+      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanResponse = jsonMatch[0];
+      }
+      
+      console.log('🧹 Cleaned response:', cleanResponse);
+      
       const parsed = JSON.parse(cleanResponse);
+      console.log('✅ Parsed result:', JSON.stringify(parsed, null, 2));
       
       return {
         needsTools: parsed.needsTools || false,
         toolCalls: parsed.toolCalls || []
       };
     } catch (error) {
-      // Fallback: Use simple pattern matching for critical operations
+      // Only fall back to patterns if AI completely fails
+      console.error('❌ AI parsing failed:', error);
+      console.log('🔄 Using fallback pattern matching...');
       return this.fallbackPatternMatching(message);
     }
   }
@@ -139,51 +155,63 @@ RESPOND WITH ONLY: general`;
    * Fallback pattern matching for when AI parsing fails
    */
   private fallbackPatternMatching(message: string): { needsTools: boolean; toolCalls: FunctionCall[] } {
+    // Better fallback that detects language and action
     const lowerMessage = message.toLowerCase().trim();
     const workingDir = this.agenticConfig.getWorkingDir();
     const toolCalls: FunctionCall[] = [];
 
-    // Robust fallback patterns for critical operations
-    const needsFileCreation = lowerMessage.includes('write') && 
-      (lowerMessage.includes('server') || lowerMessage.includes('node') || lowerMessage.includes('hello'));
+    console.log('🔍 Fallback analyzing:', lowerMessage);
+
+    // Detect file creation
+    const writePattern = lowerMessage.includes('write') || lowerMessage.includes('create');
+    const serverPattern = lowerMessage.includes('server') || lowerMessage.includes('hello');
     
-    const needsExecution = lowerMessage.includes('run') || lowerMessage.includes('execute') || 
-      lowerMessage.includes('start') || (lowerMessage.includes('and') && lowerMessage.includes('it'));
-
-    if (needsFileCreation) {
-      // Generate a working Node.js server
-      const serverContent = `const http = require('http');
-
-const server = http.createServer((req, res) => {
-  res.writeHead(200, {'Content-Type': 'text/html'});
-  res.end('<h1>Hello World!</h1><p>Server is running successfully!</p>');
-});
-
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(\`Server running at http://localhost:\${PORT}\`);
-});`;
-
+    if (writePattern && serverPattern) {
+      // Detect language
+      let fileName = 'server.js';
+      let content = 'console.log("Hello World");';
+      let runCommand = 'node server.js';
+      
+      if (lowerMessage.includes('golang') || lowerMessage.includes('go ')) {
+        fileName = 'server.go';
+        content = `package main\n\nimport (\n    "fmt"\n    "net/http"\n)\n\nfunc main() {\n    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {\n        fmt.Fprintf(w, "Hello World!")\n    })\n    fmt.Println("Server running at http://localhost:8080")\n    http.ListenAndServe(":8080", nil)\n}`;
+        runCommand = 'go run server.go';
+      } else if (lowerMessage.includes('python')) {
+        fileName = 'server.py';
+        content = 'print("Hello World")';
+        runCommand = 'python3 server.py';
+      }
+      
+      console.log(`📝 Creating ${fileName} with fallback content`);
+      
       toolCalls.push({
         name: 'write_file',
-        args: { file_path: `${workingDir}/server.js`, content: serverContent }
+        args: { 
+          file_path: `${workingDir}/${fileName}`, 
+          content: content
+        }
       });
+      
+      // Check for compound action
+      if (lowerMessage.includes('and') && (lowerMessage.includes('execute') || lowerMessage.includes('run'))) {
+        console.log(`🏃 Adding execution: ${runCommand}`);
+        toolCalls.push({
+          name: 'run_shell_command',
+          args: { command: runCommand }
+        });
+      }
     }
 
-    if (needsExecution) {
+    // Basic execution detection
+    else if (lowerMessage.match(/^(run|execute|start)(\s+it)?$/i)) {
+      console.log('🏃 Execute only pattern detected');
       toolCalls.push({
         name: 'run_shell_command',
         args: { command: 'node server.js' }
       });
     }
 
-    if (lowerMessage.includes('list') && lowerMessage.includes('files')) {
-      toolCalls.push({
-        name: 'list_directory',
-        args: { path: '.' }
-      });
-    }
-
+    console.log('🔄 Fallback result:', { needsTools: toolCalls.length > 0, toolCalls });
     return { needsTools: toolCalls.length > 0, toolCalls };
   }
 

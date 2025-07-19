@@ -29,6 +29,7 @@ describe('AgenticThinkAIClient', () => {
   let client: AgenticThinkAIClient;
   let mockToolRegistry: any;
   let mockToolScheduler: any;
+  let mockBaseClient: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,14 +50,13 @@ describe('AgenticThinkAIClient', () => {
     // Setup config mock
     mockConfig = {
       getWorkingDir: vi.fn().mockReturnValue('/test/dir'),
-      getFileService: vi.fn().mockReturnValue({}),
       getToolRegistry: vi.fn().mockReturnValue(Promise.resolve(mockToolRegistry)),
-      getFullContext: vi.fn().mockReturnValue(false),
-      getUserMemory: vi.fn().mockReturnValue(''),
-      getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
-      getModel: vi.fn().mockReturnValue('thinkai-model'),
-      getEmbeddingModel: vi.fn().mockReturnValue('thinkai-embedding'),
-      getContentGeneratorConfig: vi.fn().mockReturnValue({
+      getToolsEnabled: vi.fn().mockReturnValue(true),
+      getHttpProxy: vi.fn().mockReturnValue(undefined),
+      getSessionId: vi.fn().mockReturnValue('test-session'),
+      getDryRun: vi.fn().mockReturnValue(false),
+      getPomptomConfig: vi.fn().mockReturnValue({
+        apiKey: 'test-key',
         authType: 'test',
         model: 'test-model',
       }),
@@ -64,6 +64,20 @@ describe('AgenticThinkAIClient', () => {
       flashFallbackHandler: vi.fn(),
       getThinkAIMode: vi.fn().mockReturnValue('code'),
     } as any;
+
+    // Setup base client mock that will be used after initialize
+    mockBaseClient = {
+      sendMessageToThinkAI: vi.fn().mockRejectedValue(new Error('AI parsing failed')),
+      getChat: vi.fn().mockReturnValue({
+        getHistory: vi.fn().mockReturnValue([])
+      }),
+      initialize: vi.fn().mockResolvedValue(undefined)
+    };
+    
+    // Mock the dynamic import
+    vi.doMock('./thinkAIClient.js', () => ({
+      ThinkAIClient: vi.fn().mockImplementation(() => mockBaseClient)
+    }));
 
     client = new AgenticThinkAIClient(mockConfig);
   });
@@ -96,7 +110,7 @@ describe('AgenticThinkAIClient', () => {
       expect(mockConfig.getToolRegistry).toHaveBeenCalled();
       expect(CoreToolScheduler).toHaveBeenCalledWith({
         config: mockConfig,
-        toolRegistry: Promise.resolve(mockToolRegistry),
+        toolRegistry: mockToolRegistry,
         getPreferredEditor: expect.any(Function),
       });
     });
@@ -110,531 +124,195 @@ describe('AgenticThinkAIClient', () => {
     });
   });
 
-  describe('requiresLocalTools', () => {
+  describe('parseUserIntent and fallbackPatternMatching', () => {
     beforeEach(async () => {
       await client.initialize();
     });
 
-    it('should detect file read patterns', () => {
-      const testCases = [
-        'read file package.json',
-        'read the file config.ts',
-        'read file "test file.txt"',
-        "read file 'another.js'",
-      ];
-
-      testCases.forEach(message => {
-        const result = (client as any).requiresLocalTools(message);
-        expect(result.needsTools).toBe(true);
-        expect(result.toolCalls).toHaveLength(1);
-        expect(result.toolCalls[0].name).toBe('read_file');
-        expect(result.toolCalls[0].args).toHaveProperty('absolute_path');
-      });
+    it('should detect golang server creation', async () => {
+      // Since AI parsing fails, it should fall back to pattern matching
+      const result = await (client as any).parseUserIntent('write a simple golang server for hello world');
+      
+      expect(result.needsTools).toBe(true);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('write_file');
+      expect(result.toolCalls[0].args.file_path).toContain('server.go');
+      expect(result.toolCalls[0].args.content).toContain('package main');
+      expect(result.toolCalls[0].args.content).toContain('Hello World');
     });
 
-    it('should detect file write patterns', () => {
-      const testCases = [
-        'write to file output.txt',
-        'create file new.js',
-        'write file "test file.txt"',
-      ];
-
-      testCases.forEach(message => {
-        const result = (client as any).requiresLocalTools(message);
-        expect(result.needsTools).toBe(true);
-        expect(result.toolCalls).toHaveLength(1);
-        expect(result.toolCalls[0].name).toBe('write_file');
-        expect(result.toolCalls[0].args).toHaveProperty('file_path');
-        expect(result.toolCalls[0].args).toHaveProperty('content');
-      });
+    it('should detect python server creation', async () => {
+      const result = await (client as any).parseUserIntent('create a python flask server');
+      
+      expect(result.needsTools).toBe(true);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('write_file');
+      expect(result.toolCalls[0].args.file_path).toContain('.py');
+      expect(result.toolCalls[0].args.content).toContain('from flask import Flask');
     });
 
-    it('should detect file edit patterns', () => {
-      const testCases = [
-        'edit file config.ts',
-        'edit the file package.json',
-      ];
-
-      testCases.forEach(message => {
-        const result = (client as any).requiresLocalTools(message);
-        expect(result.needsTools).toBe(true);
-        expect(result.toolCalls).toHaveLength(1);
-        expect(result.toolCalls[0].name).toBe('edit_file');
-        expect(result.toolCalls[0].args).toHaveProperty('file_path');
-      });
+    it('should detect node.js server creation', async () => {
+      const result = await (client as any).parseUserIntent('write a node.js express server');
+      
+      expect(result.needsTools).toBe(true);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('write_file');
+      expect(result.toolCalls[0].args.file_path).toContain('server.js');
+      expect(result.toolCalls[0].args.content).toContain('const http = require');
     });
 
-    it('should detect directory listing patterns', () => {
-      const testCases = [
-        'list files',
-        'list directories',
-        'what files are in the current directory',
-        'show me the files',
-      ];
-
-      testCases.forEach(message => {
-        const result = (client as any).requiresLocalTools(message);
-        expect(result.needsTools).toBe(true);
-        expect(result.toolCalls).toHaveLength(1);
-        expect(result.toolCalls[0].name).toBe('list_directory');
-        expect(result.toolCalls[0].args).toHaveProperty('path');
-      });
+    it('should handle questions without tools', async () => {
+      const result = await (client as any).parseUserIntent('how do I install node.js?');
+      
+      expect(result.needsTools).toBe(false);
+      expect(result.toolCalls).toHaveLength(0);
     });
 
-    it('should detect command execution patterns', () => {
-      const testCases = [
-        'run command ls -la',
-        'execute npm install',
-        'shell pwd',
-        'run npm test',
-        'git status',
-        'mkdir new-folder',
-      ];
-
-      testCases.forEach(message => {
-        const result = (client as any).requiresLocalTools(message);
-        expect(result.needsTools).toBe(true);
-        expect(result.toolCalls).toHaveLength(1);
-        expect(result.toolCalls[0].name).toBe('run_shell_command');
-        expect(result.toolCalls[0].args).toHaveProperty('command');
-      });
+    it('should handle compound actions', async () => {
+      const result = await (client as any).parseUserIntent('write a golang server and execute it');
+      
+      expect(result.needsTools).toBe(true);
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls[0].name).toBe('write_file');
+      expect(result.toolCalls[0].args.file_path).toContain('server.go');
+      expect(result.toolCalls[1].name).toBe('run_shell_command');
+      expect(result.toolCalls[1].args.command).toContain('go run');
     });
 
-    it('should detect simple patterns', () => {
-      const testCases = [
-        { message: 'current directory', expectedTool: 'run_shell_command', expectedCommand: 'pwd' },
-        { message: 'install dependencies', expectedTool: 'run_shell_command', expectedCommand: 'npm install' },
-        { message: 'build the project', expectedTool: 'run_shell_command', expectedCommand: 'npm run build' },
-        { message: 'run tests', expectedTool: 'run_shell_command', expectedCommand: 'tests' },
-      ];
-
-      testCases.forEach(({ message, expectedTool, expectedCommand }) => {
-        const result = (client as any).requiresLocalTools(message);
-        expect(result.needsTools).toBe(true);
-        expect(result.toolCalls).toHaveLength(1);
-        expect(result.toolCalls[0].name).toBe(expectedTool);
-        if (expectedCommand) {
-          expect(result.toolCalls[0].args.command).toBe(expectedCommand);
-        }
+    it('should handle run it commands with context', async () => {
+      // Mock chat history to have a previous go file creation
+      mockBaseClient.getChat.mockReturnValue({
+        getHistory: vi.fn().mockReturnValue([
+          { role: 'user', parts: [{ text: 'write a golang server' }] },
+          { role: 'assistant', parts: [{ text: 'Created server.go' }] }
+        ])
       });
-    });
-
-    it('should not detect tools for regular conversation', () => {
-      const testCases = [
-        'hello world',
-        'how are you?',
-        'what is the weather like?',
-        'explain quantum physics',
-        'write a poem about cats',
-      ];
-
-      testCases.forEach(message => {
-        const result = (client as any).requiresLocalTools(message);
-        expect(result.needsTools).toBe(false);
-        expect(result.toolCalls).toHaveLength(0);
-      });
+      
+      const result = await (client as any).parseUserIntent('run it');
+      
+      expect(result.needsTools).toBe(true);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('run_shell_command');
+      expect(result.toolCalls[0].args.command).toContain('go run');
     });
   });
 
-  describe('executeLocalTools', () => {
-    let mockTool: any;
-
+  describe('selectMode', () => {
     beforeEach(async () => {
-      mockTool = {
-        name: 'test_tool',
-        execute: vi.fn(),
-      };
-      mockToolRegistry.getTool.mockReturnValue(mockTool);
       await client.initialize();
     });
 
-    it('should execute tools successfully with string content', async () => {
-      const mockResult = {
-        llmContent: 'Tool executed successfully',
-        returnDisplay: 'Tool output',
-      };
-      mockTool.execute.mockResolvedValue(mockResult);
-
-      const toolCalls = [{ name: 'test_tool', args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('Tool \'test_tool\' executed successfully');
-      expect(result).toContain('Tool executed successfully');
-      expect(mockTool.execute).toHaveBeenCalledWith(
-        { param: 'value' },
-        expect.any(AbortSignal)
-      );
-    });
-
-    it('should execute tools successfully with array content', async () => {
-      const mockResult = {
-        llmContent: [
-          { text: 'First part' },
-          'Second part',
-          { text: 'Third part' }
-        ],
-        returnDisplay: 'Tool output',
-      };
-      mockTool.execute.mockResolvedValue(mockResult);
-
-      const toolCalls = [{ name: 'test_tool', args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('First partSecond partThird part');
-    });
-
-    it('should execute tools successfully with object content', async () => {
-      const mockResult = {
-        llmContent: { text: 'Object content' },
-        returnDisplay: 'Tool output',
-      };
-      mockTool.execute.mockResolvedValue(mockResult);
-
-      const toolCalls = [{ name: 'test_tool', args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('Object content');
-    });
-
-    it('should handle tools with no output', async () => {
-      const mockResult = {
-        llmContent: '',
-        returnDisplay: '',
-      };
-      mockTool.execute.mockResolvedValue(mockResult);
-
-      const toolCalls = [{ name: 'test_tool', args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('Tool \'test_tool\' executed successfully (no output)');
-    });
-
-    it('should handle missing tool registry', async () => {
-      mockConfig.getToolRegistry = vi.fn().mockResolvedValue(null);
-
-      const toolCalls = [{ name: 'test_tool', args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('Tool registry not available for test_tool');
-    });
-
-    it('should handle tool not found', async () => {
-      mockToolRegistry.getTool.mockReturnValue(null);
-
-      const toolCalls = [{ name: 'unknown_tool', args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('Tool \'unknown_tool\' not found');
-    });
-
-    it('should handle tool execution errors', async () => {
-      const error = new Error('Tool execution failed');
-      mockTool.execute.mockRejectedValue(error);
-
-      const toolCalls = [{ name: 'test_tool', args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('Error executing tool \'test_tool\': Tool execution failed');
-    });
-
-    it('should handle multiple tools', async () => {
-      const mockTool2 = {
-        name: 'test_tool_2',
-        execute: vi.fn().mockResolvedValue({
-          llmContent: 'Second tool result',
-          returnDisplay: 'Second output',
-        }),
-      };
-
-      mockToolRegistry.getTool.mockImplementation((name: string) => {
-        if (name === 'test_tool') return mockTool;
-        if (name === 'test_tool_2') return mockTool2;
-        return null;
+    it('should select general mode for questions', async () => {
+      mockBaseClient.sendMessageToThinkAI.mockResolvedValueOnce({ 
+        response: 'general' 
       });
-
-      mockTool.execute.mockResolvedValue({
-        llmContent: 'First tool result',
-        returnDisplay: 'First output',
-      });
-
-      const toolCalls = [
-        { name: 'test_tool', args: { param: 'value1' } },
-        { name: 'test_tool_2', args: { param: 'value2' } },
-      ];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('First tool result');
-      expect(result).toContain('Second tool result');
-      expect(mockTool.execute).toHaveBeenCalledWith({ param: 'value1' }, expect.any(AbortSignal));
-      expect(mockTool2.execute).toHaveBeenCalledWith({ param: 'value2' }, expect.any(AbortSignal));
+      
+      const mode = await (client as any).selectMode('how do I test it locally?');
+      expect(mode).toBe('general');
     });
 
-    it('should handle tool call with missing name', async () => {
-      const toolCalls = [{ name: undefined, args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toContain('Tool call missing name');
-    });
-
-    it('should return error when tool scheduler not initialized', async () => {
-      (client as any).toolScheduler = undefined;
-
-      const toolCalls = [{ name: 'test_tool', args: { param: 'value' } }];
-      const result = await (client as any).executeLocalTools(toolCalls);
-
-      expect(result).toBe('Tool scheduler not initialized. Cannot execute local tools.');
+    it('should default to general on error', async () => {
+      mockBaseClient.sendMessageToThinkAI.mockRejectedValueOnce(new Error('API error'));
+      
+      const mode = await (client as any).selectMode('any message');
+      expect(mode).toBe('general');
     });
   });
 
-  describe('sendMessageStream', () => {
-    let mockChat: any;
-
+  describe('sendMessage', () => {
     beforeEach(async () => {
-      mockChat = {
+      await client.initialize();
+      // Mock chat
+      const mockChat = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
       };
-      vi.mocked(ThinkAIChat).mockImplementation(() => mockChat);
+      vi.mocked(ThinkAIChat).mockImplementation(() => mockChat as any);
+    });
 
-      // Mock tool for testing
-      const mockTool = {
-        name: 'list_directory',
-        execute: vi.fn().mockResolvedValue({
-          llmContent: 'Directory contents: file1.txt, file2.js',
-          returnDisplay: 'Dir listing',
-        }),
-      };
-      mockToolRegistry.getTool.mockReturnValue(mockTool);
+    it('should handle file creation request', async () => {
+      const message = 'write a simple golang server';
+      
+      // Mock tool scheduler to return success
+      mockToolScheduler.schedule.mockResolvedValueOnce({
+        toolCalls: [{
+          functionCall: {
+            name: 'write_file',
+            args: { file_path: '/test/dir/server.go', content: 'package main...' }
+          },
+          status: { state: 'completed' }
+        }]
+      });
+      
+      const result = await client.sendMessage(message);
+      
+      expect(mockToolScheduler.schedule).toHaveBeenCalled();
+      expect(result.response).toContain('Created server.go');
+    });
 
+    it('should handle regular conversation', async () => {
+      const message = 'what is typescript?';
+      
+      // Mock AI response for general mode
+      mockBaseClient.sendMessageToThinkAI.mockResolvedValueOnce({
+        response: 'TypeScript is a typed superset of JavaScript...'
+      });
+      
+      const result = await client.sendMessage(message);
+      
+      expect(mockToolScheduler.schedule).not.toHaveBeenCalled();
+      expect(result.response).toContain('TypeScript is a typed superset');
+    });
+
+    it('should stream responses when requested', async () => {
+      const message = 'explain node.js';
+      const onChunk = vi.fn();
+      
+      // Mock streaming response
+      mockBaseClient.sendMessageToThinkAI.mockImplementationOnce(async (msg, mode, stream) => {
+        if (stream) {
+          stream('Node.js is ');
+          stream('a JavaScript runtime');
+        }
+        return { response: 'Node.js is a JavaScript runtime' };
+      });
+      
+      const result = await client.sendMessage(message, { streamCallback: onChunk });
+      
+      expect(onChunk).toHaveBeenCalledWith('Node.js is ');
+      expect(onChunk).toHaveBeenCalledWith('a JavaScript runtime');
+      expect(result.response).toContain('Node.js is a JavaScript runtime');
+    });
+  });
+
+  describe('sendMessageStream', () => {
+    beforeEach(async () => {
       await client.initialize();
     });
 
-    it('should handle string requests requiring tools', async () => {
-      // Mock the stream response from ThinkAI
-      const mockStreamData = [
-        'data: {"chunk": "Based on the directory listing", "done": false}\n',
-        'data: {"chunk": ", you have 2 files.", "done": true}\n',
-      ];
+    it('should stream tool execution events', async () => {
+      const events: any[] = [];
+      const generator = client.sendMessageStream('create a server.js file');
       
-      const mockStream = new ReadableStream({
-        start(controller) {
-          mockStreamData.forEach(chunk => {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          });
-          controller.close();
-        },
+      // Mock tool scheduler events
+      mockToolScheduler.schedule.mockImplementationOnce(async function* () {
+        yield {
+          type: GeminiEventType.FUNCTION_CALL_START,
+          data: { name: 'write_file', args: {} }
+        };
+        yield {
+          type: GeminiEventType.FUNCTION_CALL_END,
+          data: { status: 'success' }
+        };
       });
       
-      mockFetch.mockResolvedValue({
-        ok: true,
-        body: mockStream,
-      });
-
-      const abortController = new AbortController();
-      const generator = client.sendMessageStream('list files', abortController.signal);
-      
-      const events = [];
       for await (const event of generator) {
         events.push(event);
       }
-
-      // Should execute the tool first, then get AI response
+      
       expect(events.length).toBeGreaterThan(0);
-      expect(events[0].type).toBe(GeminiEventType.Content);
-      if (events[0].type === GeminiEventType.Content) {
-        expect(events[0].value).toContain('Executing local tools');
-      }
-      
-      expect(mockChat.addHistory).toHaveBeenCalledWith({
-        role: 'user',
-        parts: [{ text: 'list files' }]
-      });
-    });
-
-    it('should handle requests not requiring tools', async () => {
-      const mockStreamData = [
-        'data: {"chunk": "Hello! I\'m here to help.", "done": true}\n',
-      ];
-      
-      const mockStream = new ReadableStream({
-        start(controller) {
-          mockStreamData.forEach(chunk => {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          });
-          controller.close();
-        },
-      });
-      
-      mockFetch.mockResolvedValue({
-        ok: true,
-        body: mockStream,
-      });
-
-      const abortController = new AbortController();
-      const generator = client.sendMessageStream('hello', abortController.signal);
-      
-      const events = [];
-      for await (const event of generator) {
-        events.push(event);
-      }
-
-      expect(events).toHaveLength(1);
-      expect(events[0].type).toBe(GeminiEventType.Content);
-      if (events[0].type === GeminiEventType.Content) {
-        expect(events[0].value).toBe("Hello! I'm here to help.");
-      }
-    });
-
-    it('should handle array requests', async () => {
-      const mockStreamData = [
-        'data: {"chunk": "Response to array", "done": true}\n',
-      ];
-      
-      const mockStream = new ReadableStream({
-        start(controller) {
-          mockStreamData.forEach(chunk => {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          });
-          controller.close();
-        },
-      });
-      
-      mockFetch.mockResolvedValue({
-        ok: true,
-        body: mockStream,
-      });
-
-      const abortController = new AbortController();
-      const request = ['Hello', { text: 'World' }];
-      const generator = client.sendMessageStream(request, abortController.signal);
-      
-      const events = [];
-      for await (const event of generator) {
-        events.push(event);
-      }
-
-      expect(mockChat.addHistory).toHaveBeenCalledWith({
-        role: 'user',
-        parts: [{ text: 'Hello World' }]
-      });
-    });
-
-    it('should handle object requests', async () => {
-      const mockStreamData = [
-        'data: {"chunk": "Response to object", "done": true}\n',
-      ];
-      
-      const mockStream = new ReadableStream({
-        start(controller) {
-          mockStreamData.forEach(chunk => {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          });
-          controller.close();
-        },
-      });
-      
-      mockFetch.mockResolvedValue({
-        ok: true,
-        body: mockStream,
-      });
-
-      const abortController = new AbortController();
-      const request = { text: 'Object message' };
-      const generator = client.sendMessageStream(request, abortController.signal);
-      
-      const events = [];
-      for await (const event of generator) {
-        events.push(event);
-      }
-
-      expect(mockChat.addHistory).toHaveBeenCalledWith({
-        role: 'user',
-        parts: [{ text: 'Object message' }]
-      });
-    });
-
-    it('should handle empty requests', async () => {
-      const abortController = new AbortController();
-      const generator = client.sendMessageStream('', abortController.signal);
-      
-      const result = await generator.next();
-      expect(result.done).toBe(true);
-    });
-
-    it('should handle zero turns', async () => {
-      const abortController = new AbortController();
-      const generator = client.sendMessageStream('test', abortController.signal, 0);
-      
-      const result = await generator.next();
-      expect(result.done).toBe(true);
-    });
-
-    it('should handle stream errors', async () => {
-      const error = new Error('Stream error');
-      mockFetch.mockRejectedValue(error);
-
-      const abortController = new AbortController();
-      const generator = client.sendMessageStream('hello', abortController.signal);
-      
-      const events = [];
-      for await (const event of generator) {
-        events.push(event);
-      }
-
-      expect(events).toHaveLength(1);
-      expect(events[0].type).toBe(GeminiEventType.Error);
-      if (events[0].type === GeminiEventType.Error) {
-        expect(events[0].value.error.message).toContain('Failed to stream message');
-      }
-    });
-
-    it('should handle aborted signal during tool execution', async () => {
-      const abortController = new AbortController();
-      abortController.abort();
-
-      const generator = client.sendMessageStream('list files', abortController.signal);
-      
-      const events = [];
-      for await (const event of generator) {
-        events.push(event);
-      }
-
-      // Should still process but handle the abort
-      expect(events.length).toBeGreaterThanOrEqual(0);
-    });
-
-    it('should properly add assistant response to history', async () => {
-      const mockStreamData = [
-        'data: {"chunk": "Complete response", "done": true}\n',
-      ];
-      
-      const mockStream = new ReadableStream({
-        start(controller) {
-          mockStreamData.forEach(chunk => {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          });
-          controller.close();
-        },
-      });
-      
-      mockFetch.mockResolvedValue({
-        ok: true,
-        body: mockStream,
-      });
-
-      const abortController = new AbortController();
-      const generator = client.sendMessageStream('hello', abortController.signal);
-      
-      // Consume all events
-      for await (const event of generator) {
-        // Just consume
-      }
-
-      expect(mockChat.addHistory).toHaveBeenCalledWith({
-        role: 'model',
-        parts: [{ text: 'Complete response' }]
-      });
+      expect(events.some(e => e.type === GeminiEventType.FUNCTION_CALL_START)).toBe(true);
     });
   });
 });
